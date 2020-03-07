@@ -1,10 +1,14 @@
-use crate::ode::{Model, State};
+use crate::ode::Model;
 
-pub trait Integrator<M: Model> {
+pub trait Integrator<M: Model>
+where
+  for<'a> &'a M::State: IntoIterator<Item = &'a M::S>,
+  for<'a> &'a mut M::State: IntoIterator<Item = &'a mut M::S>,
+{
   fn step_internal(
     &mut self,
     model: &M,
-    state: &mut State<M>,
+    state: &mut M::State,
     time: &M::S,
     time_step: &M::S,
   );
@@ -12,7 +16,7 @@ pub trait Integrator<M: Model> {
   fn step(
     &mut self,
     model: &M,
-    state: &mut State<M>,
+    state: &mut M::State,
     time: &mut M::S,
     time_step: &M::S,
   ) {
@@ -20,14 +24,4 @@ pub trait Integrator<M: Model> {
 
     *time += *time_step;
   }
-
-  // fn integrate<M: Model, F: FnMut(&State<M::S>)>(
-  //   model: &M,
-  //   state: &mut State<M::S>,
-  //   start_time: f32,
-  //   end_time: f32,
-  //   time_step: f32,
-  //   callback: &F,
-  // ) {
-  // }
 }

@@ -6,4 +6,4 @@ pub mod model;
 pub use euler::Euler;
 pub use integrator::Integrator;
 pub use midpoint::Midpoint;
-pub use model::{Model, State};
+pub use model::Model;

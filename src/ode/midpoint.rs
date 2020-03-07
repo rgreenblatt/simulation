@@ -1,16 +1,23 @@
-use crate::ode::{Integrator, Model, State};
-use ndarray::azip;
+use crate::ode::{Integrator, Model};
 
-pub struct Midpoint<M: Model> {
-  dxdt: State<M>,
-  midpoint_state: State<M>,
+pub struct Midpoint<M: Model>
+where
+  for<'a> &'a M::State: IntoIterator<Item = &'a M::S>,
+  for<'a> &'a mut M::State: IntoIterator<Item = &'a mut M::S>,
+{
+  dxdt: M::State,
+  midpoint_state: M::State,
 }
 
-impl<M: Model> Integrator<M> for Midpoint<M> {
+impl<M: Model> Integrator<M> for Midpoint<M>
+where
+  for<'a> &'a M::State: IntoIterator<Item = &'a M::S>,
+  for<'a> &'a mut M::State: IntoIterator<Item = &'a mut M::S>,
+{
   fn step_internal(
     &mut self,
     model: &M,
-    state: &mut State<M>,
+    state: &mut M::State,
     time: &M::S,
     time_step: &M::S,
   ) {
@@ -18,18 +25,20 @@ impl<M: Model> Integrator<M> for Midpoint<M> {
 
     let half_time_step = *time_step * 0.5.into();
 
-    azip!(
-      (state in &mut self.midpoint_state, dxdt in &self.dxdt)
-      {*state += *dxdt * half_time_step}
-    );
+    for ((midpoint_state, state), dxdt) in (&mut self.midpoint_state)
+      .into_iter()
+      .zip(state.into_iter())
+      .zip(self.dxdt.into_iter())
+    {
+      *midpoint_state = *state + *dxdt * half_time_step
+    }
 
     let midpoint_time = *time + half_time_step;
 
     model.derivative(&self.midpoint_state, &mut self.dxdt, &midpoint_time);
 
-    azip!(
-      (state in state, dxdt in &self.dxdt)
-      {*state += *dxdt * *time_step}
-    );
+    for (state, dxdt) in state.into_iter().zip(self.dxdt.into_iter()) {
+      *state += *dxdt * *time_step
+    }
   }
 }
