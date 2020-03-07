@@ -9,3 +9,5 @@ edition = "2018"
 [dependencies]
 kiss3d = "0.23"
 nalgebra = "0.20"
+regex = "1.3"
+clap = { git = "https://github.com/clap-rs/clap" }
