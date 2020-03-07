@@ -11,3 +11,5 @@ kiss3d = "0.23"
 nalgebra = "0.20"
 regex = "1.3"
 clap = { git = "https://github.com/clap-rs/clap" }
+alga = "0.9"
+ndarray = "0.13"

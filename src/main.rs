@@ -11,10 +11,10 @@ struct Opts {
   mesh_file: String,
 }
 
-fn main() {
+fn main() -> std::io::Result<()> {
   let opts: Opts = Opts::parse();
 
-  let mesh = load_mesh(&Path::new(&opts.mesh_file));
+  let mesh = load_mesh(&Path::new(&opts.mesh_file))?;
 
   display_scene(
     "simulation",
@@ -23,4 +23,6 @@ fn main() {
       at: Point3::origin(),
     }),
   );
+
+  Ok(())
 }
