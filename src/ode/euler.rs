@@ -1,4 +1,6 @@
-use crate::ode::{Integrator, Model};
+use crate::ode::{Integrator, Model, ModelState, NullSettings};
+
+pub type EulerSettings = NullSettings;
 
 pub struct Euler<M: Model>
 where
@@ -13,6 +15,14 @@ where
   for<'a> &'a M::State: IntoIterator<Item = &'a M::S>,
   for<'a> &'a mut M::State: IntoIterator<Item = &'a mut M::S>,
 {
+  type Settings = EulerSettings;
+
+  fn new(_: Self::Settings) -> Self {
+    Self {
+      dxdt: M::State::new(),
+    }
+  }
+
   fn step_internal(
     &mut self,
     model: &M,
