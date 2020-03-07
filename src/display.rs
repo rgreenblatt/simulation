@@ -1,19 +1,19 @@
-use crate::{CameraInfo, Scene};
+use crate::{CameraInfo, Scene, SceneGenerator};
 use kiss3d::camera::FirstPerson;
 use kiss3d::light::Light;
 use kiss3d::window::Window;
 use std::time::Instant;
 
-fn display<S: Scene>(window_name: &str, scene: &mut S) {
+pub fn display_scene<S: SceneGenerator>(window_name: &str, scene_gen: &mut S) {
   let mut window = Window::new(window_name);
 
-  scene.init_objects(&mut window.add_group());
+  let mut scene = scene_gen.init_objects(&mut window.add_group());
 
   window.set_light(Light::StickToCamera);
 
   let mut time_since_last = Instant::now();
 
-  let CameraInfo { eye, at } = scene.default_camera_info();
+  let CameraInfo { eye, at } = scene_gen.default_camera_info();
 
   let mut cam = FirstPerson::new(eye, at);
 
