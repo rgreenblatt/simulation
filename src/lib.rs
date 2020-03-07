@@ -1,4 +1,4 @@
-pub mod scene;
 pub mod display;
+pub mod scene;
 
-pub use scene::Scene;
+pub use scene::{CameraInfo, Scene};
