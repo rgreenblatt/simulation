@@ -1,5 +1,5 @@
 use crate::LoadedMesh;
-use nalgebra::{Matrix3, Point3, Vector3};
+use nalgebra::{Matrix3, Matrix4, Point3, Vector3};
 use std::collections::HashSet;
 use std::iter::FromIterator;
 
@@ -18,12 +18,14 @@ pub struct MeshParams {
 #[derive(Clone)]
 pub struct SimMesh {
   // not needed?
-  // vertex_positions_obj_space: Vec<Vector3<f32>>, // per vertex
-  vertex_mass: Vec<f32>, // per vertex
+  vertex_positions_obj_space: Vec<Vector3<f32>>, // per vertex
+  vertex_mass: Vec<f32>,                         // per vertex
 
-  inv_barycentric_mat: Vec<Matrix3<f32>>, // per tet
-  tetra_volume: Vec<f32>,                 // per tet
-  tetras: Vec<[u16; 4]>,                  // per tet
+  // TODO: WTF?
+  inv_barycentric_4_mat: Vec<Matrix4<f32>>, // per tet
+  inv_barycentric_3_mat: Vec<Matrix3<f32>>, // per tet
+  tetra_volume: Vec<f32>,                   // per tet
+  tetras: Vec<[u16; 4]>,                    // per tet
 
   boundary_vertices: Vec<u16>,
   // indexing scheme must be the same as boundary_vertices
@@ -45,21 +47,33 @@ impl SimMesh {
     (vertex_positions_obj_space, tetras): LoadedMesh,
     params: MeshParams,
   ) -> Self {
-    let mut inv_barycentric_mat = Vec::new();
+    let mut inv_barycentric_3_mat = Vec::new();
+    let mut inv_barycentric_4_mat = Vec::new();
     let mut tetra_volume = Vec::new();
-    let mut vertex_mass = Vec::new();
-    vertex_mass.resize(vertex_positions_obj_space.len(), 0.0);
+    let mut vertex_mass = vec![0.0; vertex_positions_obj_space.len()];
 
     let mut boundary_faces_set = HashSet::new();
 
     for tetra in &tetras {
-      inv_barycentric_mat.push(
+      inv_barycentric_3_mat.push(
         // TODO: fix expect
         Self::tetra_val_edges(*tetra, &vertex_positions_obj_space)
           .try_inverse()
           .expect(
             "all tetrahedrons should have inverses for barycentric coords",
           ),
+      );
+
+      inv_barycentric_4_mat.push(
+        // TODO: fix expect
+        Matrix4::from_columns(&[
+          vertex_positions_obj_space[tetra[0] as usize].insert_row(2, 1.0),
+          vertex_positions_obj_space[tetra[1] as usize].insert_row(2, 1.0),
+          vertex_positions_obj_space[tetra[2] as usize].insert_row(2, 1.0),
+          vertex_positions_obj_space[tetra[3] as usize].insert_row(2, 1.0),
+        ])
+        .try_inverse()
+        .expect("all tetrahedrons should have inverses for barycentric coords"),
       );
 
       let edges = [
@@ -130,8 +144,9 @@ impl SimMesh {
       .collect();
 
     Self {
-      // vertex_positions_obj_space,
-      inv_barycentric_mat,
+      vertex_positions_obj_space,
+      inv_barycentric_3_mat,
+      inv_barycentric_4_mat,
       tetras,
       tetra_volume,
       vertex_mass,
@@ -145,6 +160,10 @@ impl SimMesh {
     self.vertex_mass.len() as u16
   }
 
+  pub fn vertices_obj_space(&self) -> &[Vector3<f32>] {
+    &self.vertex_positions_obj_space
+  }
+
   pub fn vertex_accels(
     &self,
     positions: &[Vector3<f32>],
@@ -153,16 +172,18 @@ impl SimMesh {
     g: f32,
   ) -> Vec<Vector3<f32>> {
     let mut forces = forces.to_vec();
-    for ((tetra, inv_barycentric_mat), volume) in self
-      .tetras
-      .iter()
-      .zip(self.inv_barycentric_mat.iter())
-      .zip(self.tetra_volume.iter())
+    for (((tetra, inv_barycentric_3_mat), inv_barycentric_4_mat), volume) in
+      self
+        .tetras
+        .iter()
+        .zip(self.inv_barycentric_3_mat.iter())
+        .zip(self.inv_barycentric_4_mat.iter())
+        .zip(self.tetra_volume.iter())
     {
       let compute_stress = |vals: &[Vector3<f32>], lambda, mu| {
         let val_edges = Self::tetra_val_edges(*tetra, vals);
 
-        let deformation_grad = val_edges * inv_barycentric_mat;
+        let deformation_grad = val_edges * inv_barycentric_3_mat;
 
         let strain = 0.5
           * (deformation_grad.transpose() * deformation_grad
@@ -185,24 +206,25 @@ impl SimMesh {
 
       let stress = elastic_stress + viscous_stress;
 
-      for vertex_idx in tetra {
-        let vertex_idx = *vertex_idx as usize;
-        let force_unscaled: Vector3<f32> = tetra
-          .iter()
-          .map(|other_vertex_idx| -> Vector3<f32> {
-            let other_vertex_idx = *other_vertex_idx as usize;
-            // TODO: check this section
-            let other_vert_col = inv_barycentric_mat.column(other_vertex_idx);
-            let vert_col = inv_barycentric_mat.column(vertex_idx);
-            let sum = ((vert_col * other_vert_col.transpose()) * stress).sum();
+      for (vertex_row, vertex_idx) in tetra.iter().enumerate() {
+        let force_unscaled: Vector3<f32> = (0..tetra.len())
+          .map(|other_vertex_row| -> Vector3<f32> {
+            // TODO: WRONG: FIX BARYCENTRIC/
+            let other_vert_col =
+              inv_barycentric_4_mat.row(other_vertex_row).remove_column(3);
+            let vert_col =
+              inv_barycentric_4_mat.row(vertex_row).remove_column(3);
+            let sum = (other_vert_col.transpose() * vert_col)
+              .component_mul(&stress)
+              .sum();
 
             if cfg!(debug_assertions) {
               let mut check_sum = 0.0;
               for k in 0..2 {
                 for l in 0..2 {
                   check_sum +=
-                    (inv_barycentric_mat.row(other_vertex_idx).column(k)
-                      * inv_barycentric_mat.row(vertex_idx).column(l)
+                    (inv_barycentric_4_mat.row(other_vertex_row).column(k)
+                      * inv_barycentric_4_mat.row(vertex_row).column(l)
                       * stress.row(k).column(l))
                     .sum();
                 }
@@ -211,12 +233,12 @@ impl SimMesh {
               debug_assert!((check_sum - sum).abs() < 1e-5);
             }
 
-            positions[other_vertex_idx] * sum
+            positions[other_vertex_row] * sum
           })
           .sum();
         let force = (-*volume * 0.5) * force_unscaled;
 
-        forces[vertex_idx] += force;
+        forces[*vertex_idx as usize] += force;
       }
     }
 

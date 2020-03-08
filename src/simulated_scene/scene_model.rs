@@ -20,7 +20,6 @@ pub struct SceneModel {
 pub struct SceneModelState {
   pub positions: Vec<Vector3<f32>>,
   pub velocities: Vec<Vector3<f32>>,
-  check: Vec<f32>,
 }
 
 impl SceneModel {
@@ -43,7 +42,22 @@ impl SceneModel {
   }
 
   pub fn initial_state(&self) -> SceneModelState {
-    unimplemented!()
+    // TODO: take and use initial transforms/scale
+    SceneModelState {
+      positions: self
+        .sim_meshs
+        .iter()
+        .map(|m| m.vertices_obj_space().iter())
+        .flatten()
+        .cloned()
+        .collect(),
+      velocities: self
+        .sim_meshs
+        .iter()
+        .map(|m| m.vertices_obj_space().iter().map(|_| Vector3::zeros()))
+        .flatten()
+        .collect(),
+    }
   }
 
   pub fn meshs(&self) -> &[SimMesh] {
@@ -57,19 +71,39 @@ impl SceneModel {
 
 impl<'a> IntoIterator for &'a SceneModelState {
   type Item = &'a f32;
-  type IntoIter = std::slice::Iter<'a, f32>;
 
+  // TODO: fix box
+  type IntoIter = Box<dyn Iterator<Item = Self::Item> + 'a>;
+
+  #[inline]
   fn into_iter(self) -> Self::IntoIter {
-    self.check.iter()
+    Box::new(
+      self
+        .positions
+        .iter()
+        .map(|v| v.iter())
+        .flatten()
+        .chain(self.velocities.iter().map(|v| v.iter()).flatten()),
+    )
   }
 }
 
 impl<'a> IntoIterator for &'a mut SceneModelState {
   type Item = &'a mut f32;
-  type IntoIter = std::slice::IterMut<'a, f32>;
 
+  // TODO: fix box
+  type IntoIter = Box<dyn Iterator<Item = Self::Item> + 'a>;
+
+  #[inline]
   fn into_iter(self) -> Self::IntoIter {
-    self.check.iter_mut()
+    Box::new(
+      self
+        .positions
+        .iter_mut()
+        .map(|v| v.iter_mut())
+        .flatten()
+        .chain(self.velocities.iter_mut().map(|v| v.iter_mut()).flatten()),
+    )
   }
 }
 
@@ -78,7 +112,6 @@ impl ModelState<f32> for SceneModelState {
     SceneModelState {
       positions: Vec::new(),
       velocities: Vec::new(),
-      check: Vec::new(),
     }
   }
 }
@@ -88,6 +121,19 @@ impl Model for SceneModel {
   type State = SceneModelState;
 
   fn derivative(&self, x: &Self::State, dxdt: &mut Self::State, _: &Self::S) {
-    unimplemented!()
+    for ([start, end], mesh) in
+      self.mesh_intervals.iter().zip(self.sim_meshs.iter())
+    {
+      let start = *start as usize;
+      let end = *end as usize;
+      let accels = mesh.vertex_accels(
+        &x.positions[start..end],
+        &x.velocities[start..end],
+        &vec![Vector3::zeros(); end - start],
+        self.params.g,
+      );
+      dxdt.velocities[start..end].copy_from_slice(&accels);
+      dxdt.positions[start..end].copy_from_slice(&x.velocities[start..end]);
+    }
   }
 }
