@@ -1,5 +1,5 @@
 #[cfg(test)]
-use crate::assert_float_eq;
+use crate::{assert_float_eq, EPSILON};
 use crate::LoadedMesh;
 use nalgebra::{Matrix3, Point3, Vector3};
 use std::collections::HashSet;
@@ -193,11 +193,13 @@ impl SimMesh {
       };
 
       let deformation_grad = compute_deformation_grad(positions);
+      dbg!(deformation_grad);
       let velocity_deformation_grad = compute_deformation_grad(velocities);
 
       let elastic_strain = 0.5
         * (deformation_grad.transpose() * deformation_grad
           - Matrix3::identity());
+      dbg!(elastic_strain);
 
       // TODO: check
       let viscous_strain = 0.5
@@ -229,7 +231,7 @@ impl SimMesh {
       for (vertex_idx, opposite_normal) in
         tetra.iter().zip(opposite_normals.iter())
       {
-        let force = -mat
+        let force = mat
           * self.vertex_positions_obj_space[*vertex_idx as usize]
             .component_mul(opposite_normal);
 
@@ -429,4 +431,60 @@ fn test_just_gravity_sim_mesh() {
   check(&positions, &tetras, 0.7);
   check(&positions, &tetras, 0.1);
   check(&positions, &tetras, 18.0);
+}
+
+#[test]
+fn test_just_compressibility_sim_mesh() {
+  let density = 1.0;
+  let params = MeshParams {
+    incompressibility: 0.0,
+    rigidity: 1.0,
+    viscous_incompressibility: 0.0,
+    viscous_rigidity: 0.0,
+    density,
+  };
+
+  let positions = vec![
+    Vector3::new(0.0, 0.0, 0.0),
+    Vector3::new(1.0, 0.0, 0.0),
+    Vector3::new(0.0, 1.0, 0.0),
+    Vector3::new(0.0, 0.0, 1.0),
+  ];
+  let tetras = vec![[0, 1, 2, 3]];
+
+  let mesh = SimMesh::new((positions.clone(), tetras.clone()), params.clone());
+  let accels = mesh.vertex_accels(
+    &positions,
+    &vec![Vector3::new(0.0, 0.0, 0.0); positions.len()],
+    &vec![Vector3::new(0.0, 0.0, 0.0); positions.len()],
+    0.0,
+  );
+  for accel in accels {
+    assert_float_eq!(accel[0], 0.0);
+    assert_float_eq!(accel[1], 0.0);
+    assert_float_eq!(accel[2], 0.0);
+  }
+  
+  let new_positions = vec![
+    Vector3::new(0.0, 0.0, 0.0),
+    Vector3::new(1.0, 0.0, 0.0),
+    Vector3::new(0.0, 1.5, 0.0),
+    Vector3::new(0.0, 0.0, 1.0),
+  ];
+  
+  let accels = mesh.vertex_accels(
+    &new_positions,
+    &vec![Vector3::new(0.0, 0.0, 0.0); positions.len()],
+    &vec![Vector3::new(0.0, 0.0, 0.0); positions.len()],
+    0.0,
+  );
+    
+  dbg!(&accels);
+
+  for accel in accels {
+    dbg!(accel);
+    assert_float_eq!(accel[0], 0.0);
+    assert!(accel[1] <= EPSILON);
+    assert_float_eq!(accel[2], 0.0);
+  }
 }
