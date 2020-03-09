@@ -102,7 +102,7 @@ impl SimMesh {
         ];
 
         *opposite_normal = (vertices[1] - vertices[0])
-          .cross(&(vertices[1] - vertices[0]))
+          .cross(&(vertices[2] - vertices[0]))
           .normalize();
 
         face.sort();
@@ -179,6 +179,7 @@ impl SimMesh {
     g: f32,
   ) -> Vec<Vector3<f32>> {
     let mut forces = forces.to_vec();
+
     for ((tetra, opposite_normals), inv_barycentric_mat) in self
       .tetras
       .iter()
@@ -375,4 +376,57 @@ fn test_2_tet_sim_mesh() {
   for mass in &mesh.vertex_mass[1..4] {
     assert_float_eq!(mass, each_mass);
   }
+}
+
+#[test]
+fn test_just_gravity_sim_mesh() {
+  let density = 0.0381;
+  let params = MeshParams {
+    incompressibility: 0.0,
+    rigidity: 0.0,
+    viscous_incompressibility: 0.0,
+    viscous_rigidity: 0.0,
+    density,
+  };
+
+  let check = |positions: &Vec<_>, tetras: &Vec<_>, g| {
+    let mesh =
+      SimMesh::new((positions.clone(), tetras.clone()), params.clone());
+    let accels = mesh.vertex_accels(
+      &positions,
+      &vec![Vector3::new(0.0, 0.0, 0.0); positions.len()],
+      &vec![Vector3::new(0.0, 0.0, 0.0); positions.len()],
+      g,
+    );
+    for accel in accels {
+      assert_float_eq!(accel[0], 0.0);
+      assert_float_eq!(accel[1], -g);
+      assert_float_eq!(accel[2], 0.0);
+    }
+  };
+
+  let positions = vec![
+    Vector3::new(0.0, 0.0, 0.0),
+    Vector3::new(1.0, 0.0, 0.0),
+    Vector3::new(0.0, 1.0, 0.0),
+    Vector3::new(0.0, 0.0, 1.0),
+  ];
+  let tetras = vec![[0, 1, 2, 3]];
+
+  check(&positions, &tetras, 0.7);
+  check(&positions, &tetras, 0.1);
+  check(&positions, &tetras, 18.0);
+
+  let positions = vec![
+    Vector3::new(0.0, 0.0, 0.0),
+    Vector3::new(1.0, 0.0, 0.0),
+    Vector3::new(0.0, 1.0, 0.0),
+    Vector3::new(0.0, 0.0, 1.0),
+    Vector3::new(1.0, 1.0, 0.0),
+  ];
+  let tetras = vec![[0, 1, 2, 3], [4, 1, 2, 3]];
+
+  check(&positions, &tetras, 0.7);
+  check(&positions, &tetras, 0.1);
+  check(&positions, &tetras, 18.0);
 }

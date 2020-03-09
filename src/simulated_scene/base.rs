@@ -7,7 +7,6 @@ use crate::{
 };
 use kiss3d::resource::Mesh as Kiss3dMesh;
 use kiss3d::scene::SceneNode;
-use nalgebra::geometry::Rotation3;
 use nalgebra::Vector3;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -63,7 +62,7 @@ impl SimulatedSceneGenerator {
 }
 
 pub struct SimulatedScene {
-  cube: SceneNode,
+  // cube: SceneNode,
   meshes: Vec<Rc<RefCell<Kiss3dMesh>>>,
   scene_model: SceneModel,
   scene_state: SceneModelState,
@@ -73,9 +72,9 @@ pub struct SimulatedScene {
 
 impl Scene for SimulatedScene {
   fn update(&mut self, delta_secs: f32) {
-    self.cube.prepend_to_local_rotation(
-      &Rotation3::new(Vector3::new(1.0, 1.0, 0.0) * delta_secs).into(),
-    );
+    // self.cube.prepend_to_local_rotation(
+    //   &Rotation3::new(Vector3::new(1.0, 1.0, 0.0) * delta_secs).into(),
+    // );
 
     let steps = (delta_secs / self.step_params.time_step).ceil() as usize;
 
@@ -98,6 +97,8 @@ impl Scene for SimulatedScene {
           [(mesh_interval[0] as usize)..(mesh_interval[1] as usize)],
       );
 
+      dbg!(&positions[0]);
+
       mesh.replace(Kiss3dMesh::new(positions, faces, None, None, true));
     }
   }
@@ -107,13 +108,13 @@ impl SceneGenerator for SimulatedSceneGenerator {
   type S = SimulatedScene;
 
   fn init_objects(&self, node: &mut SceneNode) -> Self::S {
-    let mut cube = node.add_cube(2.0, 1.0, 1.0);
+    // let mut cube = node.add_cube(2.0, 1.0, 1.0);
 
-    cube.set_color(1.0, 0.0, 0.0);
-    cube.enable_backface_culling(true);
+    // cube.set_color(1.0, 0.0, 0.0);
+    // cube.enable_backface_culling(true);
 
     SimulatedScene {
-      cube,
+      // cube,
       meshes: (0..self.scene_model.meshs().len())
         .map(|_| {
           let mesh = Rc::new(RefCell::new(Kiss3dMesh::new(
