@@ -114,6 +114,15 @@ impl ModelState<f32> for SceneModelState {
       velocities: Vec::new(),
     }
   }
+
+  fn zeros_as(&mut self, other: &Self) {
+    self
+      .positions
+      .resize(other.positions.len(), Vector3::zeros());
+    self
+      .velocities
+      .resize(other.velocities.len(), Vector3::zeros());
+  }
 }
 
 impl Model for SceneModel {
@@ -132,6 +141,7 @@ impl Model for SceneModel {
         &vec![Vector3::zeros(); end - start],
         self.params.g,
       );
+
       dxdt.velocities[start..end].copy_from_slice(&accels);
       dxdt.positions[start..end].copy_from_slice(&x.velocities[start..end]);
     }

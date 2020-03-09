@@ -32,6 +32,9 @@ where
     time: &M::S,
     time_step: &M::S,
   ) {
+    self.dxdt.zeros_as(state);
+    self.midpoint_state.zeros_as(state);
+
     model.derivative(state, &mut self.dxdt, time);
 
     let half_time_step = *time_step * 0.5.into();

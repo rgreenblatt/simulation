@@ -7,6 +7,7 @@ where
   for<'a> &'a mut Self: IntoIterator<Item = &'a mut S>,
 {
   fn new() -> Self;
+  fn zeros_as(&mut self, other: &Self);
 }
 
 pub trait Model

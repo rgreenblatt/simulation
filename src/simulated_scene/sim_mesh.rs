@@ -1,9 +1,11 @@
+#[cfg(test)]
+use crate::assert_float_eq;
 use crate::LoadedMesh;
-use nalgebra::{Matrix3, Matrix4, Point3, Vector3};
+use nalgebra::{Matrix3, Point3, Vector3};
 use std::collections::HashSet;
 use std::iter::FromIterator;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct MeshParams {
   pub incompressibility: f32,
   pub rigidity: f32,
@@ -21,11 +23,9 @@ pub struct SimMesh {
   vertex_positions_obj_space: Vec<Vector3<f32>>, // per vertex
   vertex_mass: Vec<f32>,                         // per vertex
 
-  // TODO: WTF?
-  inv_barycentric_4_mat: Vec<Matrix4<f32>>, // per tet
-  inv_barycentric_3_mat: Vec<Matrix3<f32>>, // per tet
-  tetra_volume: Vec<f32>,                   // per tet
   tetras: Vec<[u16; 4]>,                    // per tet
+  opposite_normals: Vec<[Vector3<f32>; 4]>, // per tet
+  inv_barycentric_mat: Vec<Matrix3<f32>>,   // per tet
 
   boundary_vertices: Vec<u16>,
   // indexing scheme must be the same as boundary_vertices
@@ -35,11 +35,20 @@ pub struct SimMesh {
 }
 
 impl SimMesh {
+  fn get_vertex(
+    tetra: [u16; 4],
+    vals: &[Vector3<f32>],
+    idx: usize,
+  ) -> Vector3<f32> {
+    vals[tetra[idx] as usize]
+  }
+
   fn tetra_val_edges(tetra: [u16; 4], vals: &[Vector3<f32>]) -> Matrix3<f32> {
+    let get_vertex = |idx| Self::get_vertex(tetra, vals, idx);
     Matrix3::from_columns(&[
-      vals[tetra[0] as usize] - vals[tetra[3] as usize],
-      vals[tetra[1] as usize] - vals[tetra[3] as usize],
-      vals[tetra[2] as usize] - vals[tetra[3] as usize],
+      get_vertex(1) - get_vertex(0),
+      get_vertex(2) - get_vertex(0),
+      get_vertex(3) - get_vertex(0),
     ])
   }
 
@@ -47,58 +56,55 @@ impl SimMesh {
     (vertex_positions_obj_space, tetras): LoadedMesh,
     params: MeshParams,
   ) -> Self {
-    let mut inv_barycentric_3_mat = Vec::new();
-    let mut inv_barycentric_4_mat = Vec::new();
-    let mut tetra_volume = Vec::new();
+    // SPEED: reserve space
+    let mut inv_barycentric_mat = Vec::new();
+    let mut opposite_normals = Vec::new();
     let mut vertex_mass = vec![0.0; vertex_positions_obj_space.len()];
 
     let mut boundary_faces_set = HashSet::new();
 
     for tetra in &tetras {
-      inv_barycentric_3_mat.push(
+      let edges = Self::tetra_val_edges(*tetra, &vertex_positions_obj_space);
+      inv_barycentric_mat.push(
         // TODO: fix expect
-        Self::tetra_val_edges(*tetra, &vertex_positions_obj_space)
-          .try_inverse()
-          .expect(
-            "all tetrahedrons should have inverses for barycentric coords",
-          ),
+        edges.try_inverse().expect(
+          "all tetrahedrons should have inverses for barycentric coords",
+        ),
       );
 
-      inv_barycentric_4_mat.push(
-        // TODO: fix expect
-        Matrix4::from_columns(&[
-          vertex_positions_obj_space[tetra[0] as usize].insert_row(2, 1.0),
-          vertex_positions_obj_space[tetra[1] as usize].insert_row(2, 1.0),
-          vertex_positions_obj_space[tetra[2] as usize].insert_row(2, 1.0),
-          vertex_positions_obj_space[tetra[3] as usize].insert_row(2, 1.0),
-        ])
-        .try_inverse()
-        .expect("all tetrahedrons should have inverses for barycentric coords"),
-      );
-
-      let edges = [
-        (vertex_positions_obj_space[tetra[1] as usize]
-          - vertex_positions_obj_space[tetra[0] as usize]),
-        (vertex_positions_obj_space[tetra[2] as usize]
-          - vertex_positions_obj_space[tetra[0] as usize]),
-        (vertex_positions_obj_space[tetra[3] as usize]
-          - vertex_positions_obj_space[tetra[0] as usize]),
-      ];
-
-      let volume = (edges[0].cross(&edges[1])).dot(&edges[2]) / 6.0;
-
-      tetra_volume.push(volume);
+      // TODO: check use of columns is as expected
+      let volume = (edges.column(0).cross(&edges.column(1)))
+        .dot(&edges.column(2))
+        .abs()
+        / 6.0;
 
       for vertex_idx in tetra {
-        vertex_mass[*vertex_idx as usize] = params.density * volume / 4.0;
+        vertex_mass[*vertex_idx as usize] += params.density * volume / 4.0;
       }
 
-      for face in &mut [
-        [tetra[0], tetra[1], tetra[2]],
-        [tetra[0], tetra[1], tetra[3]],
-        [tetra[0], tetra[2], tetra[3]],
+      let mut tet_opposite_normals = [Vector3::zeros(); 4];
+
+      for (face, opposite_normal) in [
         [tetra[1], tetra[2], tetra[3]],
-      ] {
+        [tetra[0], tetra[2], tetra[3]],
+        [tetra[0], tetra[1], tetra[3]],
+        [tetra[0], tetra[1], tetra[2]],
+      ]
+      .iter_mut()
+      .zip(tet_opposite_normals.iter_mut())
+      {
+        let get_vertex = |idx| vertex_positions_obj_space[idx as usize];
+
+        let vertices = [
+          get_vertex(face[0]),
+          get_vertex(face[1]),
+          get_vertex(face[2]),
+        ];
+
+        *opposite_normal = (vertices[1] - vertices[0])
+          .cross(&(vertices[1] - vertices[0]))
+          .normalize();
+
         face.sort();
 
         debug_assert_eq!(
@@ -112,6 +118,8 @@ impl SimMesh {
           boundary_faces_set.insert(face.clone());
         }
       }
+
+      opposite_normals.push(tet_opposite_normals);
     }
 
     let mut boundary_vertices = Vec::new();
@@ -145,11 +153,10 @@ impl SimMesh {
 
     Self {
       vertex_positions_obj_space,
-      inv_barycentric_3_mat,
-      inv_barycentric_4_mat,
-      tetras,
-      tetra_volume,
       vertex_mass,
+      tetras,
+      opposite_normals,
+      inv_barycentric_mat,
       boundary_vertices,
       boundary_faces,
       params,
@@ -172,71 +179,58 @@ impl SimMesh {
     g: f32,
   ) -> Vec<Vector3<f32>> {
     let mut forces = forces.to_vec();
-    for (((tetra, inv_barycentric_3_mat), inv_barycentric_4_mat), volume) in
-      self
-        .tetras
-        .iter()
-        .zip(self.inv_barycentric_3_mat.iter())
-        .zip(self.inv_barycentric_4_mat.iter())
-        .zip(self.tetra_volume.iter())
+    for ((tetra, opposite_normals), inv_barycentric_mat) in self
+      .tetras
+      .iter()
+      .zip(self.opposite_normals.iter())
+      .zip(self.inv_barycentric_mat.iter())
     {
-      let compute_stress = |vals: &[Vector3<f32>], lambda, mu| {
+      let compute_deformation_grad = |vals: &[Vector3<f32>]| {
         let val_edges = Self::tetra_val_edges(*tetra, vals);
 
-        let deformation_grad = val_edges * inv_barycentric_3_mat;
-
-        let strain = 0.5
-          * (deformation_grad.transpose() * deformation_grad
-            - Matrix3::identity());
-
-        lambda * Matrix3::identity() * strain.trace() + 2.0 * mu * strain
+        val_edges * inv_barycentric_mat
       };
 
-      let elastic_stress = compute_stress(
-        positions,
+      let deformation_grad = compute_deformation_grad(positions);
+      let velocity_deformation_grad = compute_deformation_grad(velocities);
+
+      let elastic_strain = 0.5
+        * (deformation_grad.transpose() * deformation_grad
+          - Matrix3::identity());
+
+      // TODO: check
+      let viscous_strain = 0.5
+        * (deformation_grad.transpose() * velocity_deformation_grad
+          + velocity_deformation_grad.transpose() * deformation_grad);
+
+      let strain_to_stress =
+        |strain: Matrix3<_>, incompressibility, rigidity| {
+          incompressibility * Matrix3::identity() * strain.trace()
+            + 2.0 * rigidity * strain
+        };
+
+      let elastic_stress = strain_to_stress(
+        elastic_strain,
         self.params.incompressibility,
         self.params.rigidity,
       );
 
-      let viscous_stress = compute_stress(
-        velocities,
+      let viscous_stress = strain_to_stress(
+        viscous_strain,
         self.params.viscous_incompressibility,
         self.params.viscous_rigidity,
       );
 
       let stress = elastic_stress + viscous_stress;
 
-      for (vertex_row, vertex_idx) in tetra.iter().enumerate() {
-        let force_unscaled: Vector3<f32> = (0..tetra.len())
-          .map(|other_vertex_row| -> Vector3<f32> {
-            // TODO: WRONG: FIX BARYCENTRIC/
-            let other_vert_col =
-              inv_barycentric_4_mat.row(other_vertex_row).remove_column(3);
-            let vert_col =
-              inv_barycentric_4_mat.row(vertex_row).remove_column(3);
-            let sum = (other_vert_col.transpose() * vert_col)
-              .component_mul(&stress)
-              .sum();
+      let mat = deformation_grad * stress;
 
-            if cfg!(debug_assertions) {
-              let mut check_sum = 0.0;
-              for k in 0..2 {
-                for l in 0..2 {
-                  check_sum +=
-                    (inv_barycentric_4_mat.row(other_vertex_row).column(k)
-                      * inv_barycentric_4_mat.row(vertex_row).column(l)
-                      * stress.row(k).column(l))
-                    .sum();
-                }
-              }
-
-              debug_assert!((check_sum - sum).abs() < 1e-5);
-            }
-
-            positions[other_vertex_row] * sum
-          })
-          .sum();
-        let force = (-*volume * 0.5) * force_unscaled;
+      for (vertex_idx, opposite_normal) in
+        tetra.iter().zip(opposite_normals.iter())
+      {
+        let force = -mat
+          * self.vertex_positions_obj_space[*vertex_idx as usize]
+            .component_mul(opposite_normal);
 
         forces[*vertex_idx as usize] += force;
       }
@@ -271,5 +265,114 @@ impl SimMesh {
         .map(|v| Point3::new(v[0], v[1], v[2]))
         .collect(),
     )
+  }
+}
+
+#[test]
+fn test_1_tet_sim_mesh() {
+  let positions = vec![
+    Vector3::new(0.0, 0.0, 0.0),
+    Vector3::new(1.0, 0.0, 0.0),
+    Vector3::new(0.0, 1.0, 0.0),
+    Vector3::new(0.0, 0.0, 1.0),
+  ];
+  let tetras = vec![[0, 1, 2, 3]];
+  let density = 1.0;
+  let params = MeshParams {
+    incompressibility: 0.0,
+    rigidity: 0.0,
+    viscous_incompressibility: 0.0,
+    viscous_rigidity: 0.0,
+    density,
+  };
+
+  let mesh = SimMesh::new((positions, tetras.clone()), params.clone());
+
+  assert_eq!(mesh.params, params);
+  assert_eq!(mesh.tetras, tetras);
+
+  // assert_eq!(
+  //   HashSet::<[u16; 3]>::from_iter(mesh.boundary_faces.iter().cloned().map(
+  //     // Sort to avoid ordering issues
+  //     |mut v| {
+  //       v.sort();
+  //       v
+  //     }
+  //   )),
+  //   HashSet::from_iter(
+  //     [[1, 2, 3], [0, 2, 3], [0, 1, 3], [0, 1, 2],]
+  //       .iter()
+  //       .cloned()
+  //   )
+  // );
+  // assert_eq!(mesh.boundary_vertices, vec![0, 1, 2, 3]);
+
+  let vol = 1.0 / 6.0;
+  let total_mass: f32 = vol * density;
+  let actual_total_mass: f32 = mesh.vertex_mass.iter().sum();
+  assert_float_eq!(total_mass, actual_total_mass);
+  let each_mass = actual_total_mass / 4.0;
+  for mass in &mesh.vertex_mass {
+    assert_float_eq!(mass, each_mass);
+  }
+}
+
+#[test]
+fn test_2_tet_sim_mesh() {
+  let positions = vec![
+    Vector3::new(0.0, 0.0, 0.0),
+    Vector3::new(1.0, 0.0, 0.0),
+    Vector3::new(0.0, 1.0, 0.0),
+    Vector3::new(0.0, 0.0, 1.0),
+    Vector3::new(1.0, 1.0, 0.0),
+  ];
+  let tetras = vec![[0, 1, 2, 3], [4, 1, 2, 3]];
+  let density = 1.0;
+  let params = MeshParams {
+    incompressibility: 0.0,
+    rigidity: 0.0,
+    viscous_incompressibility: 0.0,
+    viscous_rigidity: 0.0,
+    density,
+  };
+
+  let mesh = SimMesh::new((positions, tetras.clone()), params.clone());
+
+  assert_eq!(mesh.params, params);
+  assert_eq!(mesh.tetras, tetras);
+
+  // assert_eq!(
+  //   HashSet::<[u16; 3]>::from_iter(mesh.boundary_faces.iter().cloned().map(
+  //     // Sort to avoid ordering issues
+  //     |mut v| {
+  //       v.sort();
+  //       v
+  //     }
+  //   )),
+  //   HashSet::from_iter(
+  //     [
+  //       [0, 2, 3],
+  //       [0, 1, 3],
+  //       [0, 1, 2],
+  //       [2, 3, 4],
+  //       [1, 3, 4],
+  //       [1, 2, 4],
+  //     ]
+  //     .iter()
+  //     .cloned()
+  //   )
+  // );
+  // assert_eq!(mesh.boundary_vertices, vec![0, 1, 2, 3, 4]);
+
+  let vol_each_tet = 1.0 / 6.0;
+  let vol = vol_each_tet * 2.0;
+  let total_mass: f32 = vol * density;
+  let actual_total_mass: f32 = mesh.vertex_mass.iter().sum();
+  assert_float_eq!(total_mass, actual_total_mass);
+  assert_float_eq!(mesh.vertex_mass[0], total_mass / 2.0 / 4.0);
+  assert_float_eq!(mesh.vertex_mass[4], total_mass / 2.0 / 4.0);
+  let each_mass = total_mass / 4.0;
+  for mass in &mesh.vertex_mass[1..4] {
+    assert_float_eq!(mass, each_mass);
   }
 }

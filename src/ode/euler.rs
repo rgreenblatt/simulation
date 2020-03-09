@@ -30,6 +30,8 @@ where
     time: &M::S,
     time_step: &M::S,
   ) {
+    self.dxdt.zeros_as(state);
+
     model.derivative(state, &mut self.dxdt, time);
 
     for (state, dxdt) in state.into_iter().zip(self.dxdt.into_iter()) {
