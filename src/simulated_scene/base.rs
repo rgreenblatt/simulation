@@ -7,7 +7,7 @@ use crate::{
 };
 use kiss3d::resource::Mesh as Kiss3dMesh;
 use kiss3d::scene::SceneNode;
-use nalgebra::Vector3;
+use nalgebra::{Point3, Vector3};
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -97,8 +97,6 @@ impl Scene for SimulatedScene {
           [(mesh_interval[0] as usize)..(mesh_interval[1] as usize)],
       );
 
-      dbg!(&positions[0]);
-
       mesh.replace(Kiss3dMesh::new(positions, faces, None, None, true));
     }
   }
@@ -111,7 +109,6 @@ impl SceneGenerator for SimulatedSceneGenerator {
     // let mut cube = node.add_cube(2.0, 1.0, 1.0);
 
     // cube.set_color(1.0, 0.0, 0.0);
-    // cube.enable_backface_culling(true);
 
     SimulatedScene {
       // cube,
@@ -125,7 +122,13 @@ impl SceneGenerator for SimulatedSceneGenerator {
             true,
           )));
 
-          node.add_mesh(mesh.clone(), Vector3::new(1.0, 1.0, 1.0));
+          let mut mesh_scene_node =
+            node.add_mesh(mesh.clone(), Vector3::new(1.0, 1.0, 1.0));
+
+          mesh_scene_node.enable_backface_culling(false);
+          mesh_scene_node.set_color(1.0, 0.0, 0.0);
+          mesh_scene_node.set_lines_color(Some(Point3::new(0.0, 0.0, 0.0)));
+          mesh_scene_node.set_lines_width(3.0);
 
           mesh
         })

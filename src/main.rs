@@ -1,7 +1,7 @@
 use clap::Clap;
-use nalgebra::Point3;
+use nalgebra::{Point3, Rotation3, Transform3, Vector3};
 use simulation::{
-  display_scene, load_mesh,
+  display_scene, load_mesh_with_transform,
   ode::IntegratorType,
   simulated_scene::{
     GlobalParams, IntegrationParams, MeshParams, SceneModelParams,
@@ -22,14 +22,19 @@ struct Opts {
 fn main() -> std::io::Result<()> {
   let opts: Opts = Opts::parse();
 
-  let mesh = load_mesh(&Path::new(&opts.mesh_file))?;
+  let mesh = load_mesh_with_transform(
+    &Path::new(&opts.mesh_file),
+    Some(&Transform3::from_matrix_unchecked(
+      Rotation3::new(Vector3::new(0.0, 1.0, 0.0)).to_homogeneous(),
+    )),
+  )?;
 
   let mesh_params = MeshParams {
     incompressibility: 2.5,
     rigidity: 2.5,
     viscous_incompressibility: 2.5,
     viscous_rigidity: 2.5,
-    density: 1.0,
+    density: 10000.0,
   };
 
   display_scene(

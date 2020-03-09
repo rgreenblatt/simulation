@@ -1,9 +1,16 @@
 #[cfg(test)]
-use crate::{assert_float_eq, EPSILON};
+use crate::assert_float_eq;
 use crate::LoadedMesh;
 use nalgebra::{Matrix3, Point3, Vector3};
+#[cfg(test)]
+use nalgebra::{Rotation3, Translation3};
 use std::collections::HashSet;
 use std::iter::FromIterator;
+
+#[cfg(test)]
+use proptest::prelude::*;
+#[cfg(test)]
+use proptest_derive::Arbitrary;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct MeshParams {
@@ -193,13 +200,11 @@ impl SimMesh {
       };
 
       let deformation_grad = compute_deformation_grad(positions);
-      dbg!(deformation_grad);
       let velocity_deformation_grad = compute_deformation_grad(velocities);
 
       let elastic_strain = 0.5
         * (deformation_grad.transpose() * deformation_grad
           - Matrix3::identity());
-      dbg!(elastic_strain);
 
       // TODO: check
       let viscous_strain = 0.5
@@ -271,26 +276,68 @@ impl SimMesh {
   }
 }
 
+#[cfg(test)]
+fn basic_params() -> MeshParams {
+  MeshParams {
+    incompressibility: 1.0,
+    rigidity: 1.0,
+    viscous_incompressibility: 1.0,
+    viscous_rigidity: 1.0,
+    density: 1.0,
+  }
+}
+
+#[cfg(test)]
+type MeshInfo = (SimMesh, Vec<Vector3<f32>>, Vec<[u16; 4]>);
+
+#[cfg(test)]
+#[derive(Debug, Arbitrary)]
+enum MeshOptions {
+  SingleTet,
+  DoubleTet,
+}
+
+#[cfg(test)]
+impl MeshOptions {
+  fn get_mesh(&self, params: &MeshParams) -> MeshInfo {
+    match self {
+      MeshOptions::SingleTet => {
+        let positions = vec![
+          Vector3::new(0.0, 0.0, 0.0),
+          Vector3::new(1.0, 0.0, 0.0),
+          Vector3::new(0.0, 1.0, 0.0),
+          Vector3::new(0.0, 0.0, 1.0),
+        ];
+        let tetras = vec![[0, 1, 2, 3]];
+        let mesh =
+          SimMesh::new((positions.clone(), tetras.clone()), params.clone());
+
+        (mesh, positions, tetras)
+      }
+      MeshOptions::DoubleTet => {
+        let positions = vec![
+          Vector3::new(0.0, 0.0, 0.0),
+          Vector3::new(1.0, 0.0, 0.0),
+          Vector3::new(0.0, 1.0, 0.0),
+          Vector3::new(0.0, 0.0, 1.0),
+          Vector3::new(1.0, 1.0, 0.0),
+        ];
+        let tetras = vec![[0, 1, 2, 3], [4, 1, 2, 3]];
+        let mesh =
+          SimMesh::new((positions.clone(), tetras.clone()), params.clone());
+
+        (mesh, positions, tetras)
+      }
+    }
+  }
+}
+
 #[test]
-fn test_1_tet_sim_mesh() {
-  let positions = vec![
-    Vector3::new(0.0, 0.0, 0.0),
-    Vector3::new(1.0, 0.0, 0.0),
-    Vector3::new(0.0, 1.0, 0.0),
-    Vector3::new(0.0, 0.0, 1.0),
-  ];
-  let tetras = vec![[0, 1, 2, 3]];
-  let density = 1.0;
-  let params = MeshParams {
-    incompressibility: 0.0,
-    rigidity: 0.0,
-    viscous_incompressibility: 0.0,
-    viscous_rigidity: 0.0,
-    density,
-  };
+fn single_tet_basic() {
+  let params = basic_params();
+  let (mesh, positions, tetras) = MeshOptions::SingleTet.get_mesh(&params);
 
-  let mesh = SimMesh::new((positions, tetras.clone()), params.clone());
-
+  assert_eq!(mesh.vertex_positions_obj_space, positions);
   assert_eq!(mesh.params, params);
   assert_eq!(mesh.tetras, tetras);
 
@@ -311,7 +358,7 @@ fn test_1_tet_sim_mesh() {
   // assert_eq!(mesh.boundary_vertices, vec![0, 1, 2, 3]);
 
   let vol = 1.0 / 6.0;
-  let total_mass: f32 = vol * density;
+  let total_mass: f32 = vol * params.density;
   let actual_total_mass: f32 = mesh.vertex_mass.iter().sum();
   assert_float_eq!(total_mass, actual_total_mass);
   let each_mass = actual_total_mass / 4.0;
@@ -321,26 +368,11 @@ fn test_1_tet_sim_mesh() {
 }
 
 #[test]
-fn test_2_tet_sim_mesh() {
-  let positions = vec![
-    Vector3::new(0.0, 0.0, 0.0),
-    Vector3::new(1.0, 0.0, 0.0),
-    Vector3::new(0.0, 1.0, 0.0),
-    Vector3::new(0.0, 0.0, 1.0),
-    Vector3::new(1.0, 1.0, 0.0),
-  ];
-  let tetras = vec![[0, 1, 2, 3], [4, 1, 2, 3]];
-  let density = 1.0;
-  let params = MeshParams {
-    incompressibility: 0.0,
-    rigidity: 0.0,
-    viscous_incompressibility: 0.0,
-    viscous_rigidity: 0.0,
-    density,
-  };
+fn double_tet_basic() {
+  let params = basic_params();
+  let (mesh, positions, tetras) = MeshOptions::DoubleTet.get_mesh(&params);
 
-  let mesh = SimMesh::new((positions, tetras.clone()), params.clone());
-
+  assert_eq!(mesh.vertex_positions_obj_space, positions);
   assert_eq!(mesh.params, params);
   assert_eq!(mesh.tetras, tetras);
 
@@ -369,7 +401,7 @@ fn test_2_tet_sim_mesh() {
 
   let vol_each_tet = 1.0 / 6.0;
   let vol = vol_each_tet * 2.0;
-  let total_mass: f32 = vol * density;
+  let total_mass: f32 = vol * params.density;
   let actual_total_mass: f32 = mesh.vertex_mass.iter().sum();
   assert_float_eq!(total_mass, actual_total_mass);
   assert_float_eq!(mesh.vertex_mass[0], total_mass / 2.0 / 4.0);
@@ -380,111 +412,44 @@ fn test_2_tet_sim_mesh() {
   }
 }
 
+#[cfg(test)]
+proptest! {
 #[test]
-fn test_just_gravity_sim_mesh() {
-  let density = 0.0381;
+fn rigid_transform_gravity(
+  g in 0.0f32..100.0,
+  incompressibility in 0.001f32..100.0,
+  rigidity in 0.001f32..100.0,
+  viscous_incompressibility in 0.001f32..100.0,
+  viscous_rigidity in 0.001f32..100.0,
+  density in 100.0f32..10000.0,
+  mesh_option : MeshOptions,
+  translation in prop::array::uniform3(-2.0f32..2.0),
+  rotation in prop::array::uniform3(-2.0f32..2.0),
+) {
   let params = MeshParams {
-    incompressibility: 0.0,
-    rigidity: 0.0,
-    viscous_incompressibility: 0.0,
-    viscous_rigidity: 0.0,
+    incompressibility,
+    rigidity,
+    viscous_incompressibility,
+    viscous_rigidity,
     density,
   };
+  let (mesh, positions, _) = mesh_option.get_mesh(&params);
 
-  let check = |positions: &Vec<_>, tetras: &Vec<_>, g| {
-    let mesh =
-      SimMesh::new((positions.clone(), tetras.clone()), params.clone());
-    let accels = mesh.vertex_accels(
-      &positions,
-      &vec![Vector3::new(0.0, 0.0, 0.0); positions.len()],
-      &vec![Vector3::new(0.0, 0.0, 0.0); positions.len()],
-      g,
-    );
-    for accel in accels {
-      assert_float_eq!(accel[0], 0.0);
-      assert_float_eq!(accel[1], -g);
-      assert_float_eq!(accel[2], 0.0);
-    }
-  };
+  let translation = Translation3::from(Vector3::from(translation));
+  let rotation = Rotation3::new(Vector3::from(rotation));
+  let transform = translation * rotation;
 
-  let positions = vec![
-    Vector3::new(0.0, 0.0, 0.0),
-    Vector3::new(1.0, 0.0, 0.0),
-    Vector3::new(0.0, 1.0, 0.0),
-    Vector3::new(0.0, 0.0, 1.0),
-  ];
-  let tetras = vec![[0, 1, 2, 3]];
+  let accels = mesh.vertex_accels(
+    &positions.iter().map(|vertex| transform * vertex).collect::<Vec<_>>(),
+    &vec![Vector3::new(0.0, 0.0, 0.0); positions.len()],
+    &vec![Vector3::new(0.0, 0.0, 0.0); positions.len()],
+    g,
+  );
 
-  check(&positions, &tetras, 0.7);
-  check(&positions, &tetras, 0.1);
-  check(&positions, &tetras, 18.0);
-
-  let positions = vec![
-    Vector3::new(0.0, 0.0, 0.0),
-    Vector3::new(1.0, 0.0, 0.0),
-    Vector3::new(0.0, 1.0, 0.0),
-    Vector3::new(0.0, 0.0, 1.0),
-    Vector3::new(1.0, 1.0, 0.0),
-  ];
-  let tetras = vec![[0, 1, 2, 3], [4, 1, 2, 3]];
-
-  check(&positions, &tetras, 0.7);
-  check(&positions, &tetras, 0.1);
-  check(&positions, &tetras, 18.0);
+  for accel in accels {
+    assert_float_eq!(accel[0], 0.0);
+    assert_float_eq!(accel[1], -g);
+    assert_float_eq!(accel[2], 0.0);
+  }
 }
-
-#[test]
-fn test_just_compressibility_sim_mesh() {
-  let density = 1.0;
-  let params = MeshParams {
-    incompressibility: 0.0,
-    rigidity: 1.0,
-    viscous_incompressibility: 0.0,
-    viscous_rigidity: 0.0,
-    density,
-  };
-
-  let positions = vec![
-    Vector3::new(0.0, 0.0, 0.0),
-    Vector3::new(1.0, 0.0, 0.0),
-    Vector3::new(0.0, 1.0, 0.0),
-    Vector3::new(0.0, 0.0, 1.0),
-  ];
-  let tetras = vec![[0, 1, 2, 3]];
-
-  let mesh = SimMesh::new((positions.clone(), tetras.clone()), params.clone());
-  let accels = mesh.vertex_accels(
-    &positions,
-    &vec![Vector3::new(0.0, 0.0, 0.0); positions.len()],
-    &vec![Vector3::new(0.0, 0.0, 0.0); positions.len()],
-    0.0,
-  );
-  for accel in accels {
-    assert_float_eq!(accel[0], 0.0);
-    assert_float_eq!(accel[1], 0.0);
-    assert_float_eq!(accel[2], 0.0);
-  }
-  
-  let new_positions = vec![
-    Vector3::new(0.0, 0.0, 0.0),
-    Vector3::new(1.0, 0.0, 0.0),
-    Vector3::new(0.0, 1.5, 0.0),
-    Vector3::new(0.0, 0.0, 1.0),
-  ];
-  
-  let accels = mesh.vertex_accels(
-    &new_positions,
-    &vec![Vector3::new(0.0, 0.0, 0.0); positions.len()],
-    &vec![Vector3::new(0.0, 0.0, 0.0); positions.len()],
-    0.0,
-  );
-    
-  dbg!(&accels);
-
-  for accel in accels {
-    dbg!(accel);
-    assert_float_eq!(accel[0], 0.0);
-    assert!(accel[1] <= EPSILON);
-    assert_float_eq!(accel[2], 0.0);
-  }
 }
