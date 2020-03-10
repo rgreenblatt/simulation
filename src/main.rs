@@ -57,6 +57,9 @@ struct Opts {
   #[clap(short = "d", long = "density", default_value = "5.0")]
   density: f32,
 
+  #[clap(short = "g", long = "gravity", default_value = "9.8")]
+  g: f32,
+
   #[clap(subcommand)]
   integrator_type: IntegratorType,
 }
@@ -76,6 +79,7 @@ fn main() -> std::io::Result<()> {
     viscous_incompressibility,
     density,
     integrator_type,
+    g,
   } = Opts::parse();
 
   let mesh = load_mesh_with_transform(
@@ -105,7 +109,7 @@ fn main() -> std::io::Result<()> {
         at: Point3::new(0.0, -3.0, 0.0),
       },
       GlobalParams {
-        scene_model_params: SceneModelParams { g: 9.8 },
+        scene_model_params: SceneModelParams { g },
         integration_params: IntegrationParams {
           step_params: StepParams {
             speed_up,
