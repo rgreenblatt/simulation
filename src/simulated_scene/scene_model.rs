@@ -2,7 +2,12 @@ use crate::{
   ode::{Model, ModelState},
   simulated_scene::SimMesh,
 };
+use nalgebra::base::iter::{MatrixIter, MatrixIterMut};
+use nalgebra::dimension::*;
+use nalgebra::storage::Owned;
 use nalgebra::Vector3;
+use std::iter::{Chain, Flatten, Map};
+use std::slice::{Iter, IterMut};
 
 #[derive(Debug, Clone)]
 pub struct SceneModelParams {
@@ -79,41 +84,77 @@ impl SceneModel {
   }
 }
 
+type BaseIntoIterGen<'a, I, M> = Flatten<Map<I, M>>;
+
+fn float_iter_vector(
+  vec: &Vector3<f32>,
+) -> MatrixIter<f32, U3, U1, Owned<f32, U3, U1>> {
+  vec.iter()
+}
+
+type FloatIterVector =
+  for<'a> fn(
+    &'a Vector3<f32>,
+  ) -> MatrixIter<'a, f32, U3, U1, Owned<f32, U3, U1>>;
+
+type BaseIntoIter<'a> =
+  BaseIntoIterGen<'a, Iter<'a, Vector3<f32>>, FloatIterVector>;
+
 impl<'a> IntoIterator for &'a SceneModelState {
   type Item = &'a f32;
 
-  // TODO: fix box
-  type IntoIter = Box<dyn Iterator<Item = Self::Item> + 'a>;
+  type IntoIter = Chain<BaseIntoIter<'a>, BaseIntoIter<'a>>;
 
   #[inline]
   fn into_iter(self) -> Self::IntoIter {
-    Box::new(
-      self
-        .positions
-        .iter()
-        .map(|v| v.iter())
-        .flatten()
-        .chain(self.velocities.iter().map(|v| v.iter()).flatten()),
-    )
+    self
+      .positions
+      .iter()
+      .map(float_iter_vector as FloatIterVector)
+      .flatten()
+      .chain(
+        self
+          .velocities
+          .iter()
+          .map(float_iter_vector as FloatIterVector)
+          .flatten(),
+      )
   }
 }
+
+fn float_iter_vector_mut(
+  vec: &mut Vector3<f32>,
+) -> MatrixIterMut<f32, U3, U1, Owned<f32, U3, U1>> {
+  vec.iter_mut()
+}
+
+type FloatIterVectorMut =
+  for<'a> fn(
+    &'a mut Vector3<f32>,
+  ) -> MatrixIterMut<'a, f32, U3, U1, Owned<f32, U3, U1>>;
+
+type BaseIntoIterMut<'a> =
+  BaseIntoIterGen<'a, IterMut<'a, Vector3<f32>>, FloatIterVectorMut>;
 
 impl<'a> IntoIterator for &'a mut SceneModelState {
   type Item = &'a mut f32;
 
-  // TODO: fix box
-  type IntoIter = Box<dyn Iterator<Item = Self::Item> + 'a>;
+  type IntoIter = Chain<BaseIntoIterMut<'a>, BaseIntoIterMut<'a>>;
 
   #[inline]
   fn into_iter(self) -> Self::IntoIter {
-    Box::new(
-      self
-        .positions
-        .iter_mut()
-        .map(|v| v.iter_mut())
-        .flatten()
-        .chain(self.velocities.iter_mut().map(|v| v.iter_mut()).flatten()),
-    )
+    self
+      .positions
+      .iter_mut()
+      .map(float_iter_vector_mut as FloatIterVectorMut)
+      .flatten()
+      .chain(
+        self
+          .velocities
+          .iter_mut()
+          .map(float_iter_vector_mut as FloatIterVectorMut)
+          .flatten(),
+      )
   }
 }
 
