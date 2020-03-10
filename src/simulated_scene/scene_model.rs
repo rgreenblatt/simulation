@@ -73,6 +73,10 @@ impl SceneModel {
   pub fn mesh_intervals(&self) -> &[[u16; 2]] {
     &self.mesh_intervals
   }
+
+  pub fn floor_height(&self) -> f32 {
+    self.floor_height
+  }
 }
 
 impl<'a> IntoIterator for &'a SceneModelState {

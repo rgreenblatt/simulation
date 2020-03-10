@@ -1,5 +1,6 @@
 use crate::ode::{
   Euler, EulerSettings, Integrator, Midpoint, MidpointSettings, Model,
+  RK4Settings, RK4,
 };
 use clap::Clap;
 
@@ -8,6 +9,7 @@ use clap::Clap;
 pub enum IntegratorType {
   Euler(EulerSettings),
   Midpoint(MidpointSettings),
+  RK4(RK4Settings),
 }
 
 pub enum SwappableIntegrator<M: Model>
@@ -17,6 +19,7 @@ where
 {
   Euler(Euler<M>),
   Midpoint(Midpoint<M>),
+  RK4(RK4<M>),
 }
 
 // impl<M: Model> SwappableIntegrator<M>
@@ -39,6 +42,7 @@ where
       IntegratorType::Midpoint(settings) => {
         Self::Midpoint(Midpoint::new(settings))
       }
+      IntegratorType::RK4(settings) => Self::RK4(RK4::new(settings)),
     }
   }
 
@@ -51,12 +55,13 @@ where
   ) {
     // TODO: use dispatch somehow (builder...)
     match self {
-      Self::Midpoint(method) => {
-        method.step_internal(model, state, time, time_step)
-      }
       Self::Euler(method) => {
         method.step_internal(model, state, time, time_step)
       }
+      Self::Midpoint(method) => {
+        method.step_internal(model, state, time, time_step)
+      }
+      Self::RK4(method) => method.step_internal(model, state, time, time_step),
     }
   }
 }

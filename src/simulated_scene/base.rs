@@ -7,7 +7,7 @@ use crate::{
 };
 use kiss3d::resource::Mesh as Kiss3dMesh;
 use kiss3d::scene::SceneNode;
-use nalgebra::{Point3, Vector3};
+use nalgebra::{Point3, Translation3, Vector3};
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -102,7 +102,18 @@ impl SceneGenerator for SimulatedSceneGenerator {
   type S = SimulatedScene;
 
   fn init_objects(&self, node: &mut SceneNode) -> Self::S {
-    // node.add_cube(Point
+    let floor_thickness = 0.2;
+    let floor_width = 5.0;
+    let floor_depth = 5.0;
+    let mut floor_node =
+      node.add_cube(floor_width, floor_thickness, floor_depth);
+    floor_node.append_translation(&Translation3::new(
+      0.0,
+      (-0.5 * floor_thickness) + self.scene_model.floor_height(),
+      0.0,
+    ));
+    floor_node.set_color(0.0, 0.0, 1.0);
+
     SimulatedScene {
       meshes: (0..self.scene_model.meshs().len())
         .map(|_| {

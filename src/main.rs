@@ -28,48 +28,62 @@ struct Opts {
   #[clap(long = "force-sim-fps")]
   force_sim_fps: Option<f32>,
 
+  #[clap(long = "speed_up", default_value = "1.0")]
+  speed_up: f32,
+
+  #[clap(short = "s", long = "time-step", default_value = "0.0005")]
+  time_step: f32,
+
   #[clap(subcommand)]
-  integrator: IntegratorType,
-  
+  integrator_type: IntegratorType,
 }
 
 fn main() -> std::io::Result<()> {
-  let opts: Opts = Opts::parse();
+  let Opts {
+    mesh_file,
+    hide,
+    record_image_dir,
+    frame_limit,
+    force_sim_fps,
+    speed_up,
+    time_step,
+    integrator_type,
+  } = Opts::parse();
 
   let mesh = load_mesh_with_transform(
-    &Path::new(&opts.mesh_file),
+    &Path::new(&mesh_file),
     Some(&Transform3::from_matrix_unchecked(
       Rotation3::new(Vector3::new(0.0, 1.0, 0.0)).to_homogeneous(),
     )),
   )?;
 
   let mesh_params = MeshParams {
-    incompressibility: 1000.,
-    rigidity: 50.,
-    viscous_incompressibility: 30.,
-    viscous_rigidity: 3.,
+    incompressibility: 100.,
+    rigidity: 10.,
+    viscous_incompressibility: 2.,
+    viscous_rigidity: 30.,
     density: 5.0,
   };
 
   display_scene(
     "simulation",
-    opts.hide,
-    opts.record_image_dir.as_ref().map(|v| Path::new(v)),
-    opts.frame_limit,
-    opts.force_sim_fps,
+    hide,
+    record_image_dir.as_ref().map(|v| Path::new(v)),
+    frame_limit,
+    force_sim_fps,
     &mut SimulatedSceneGenerator::new(
       CameraInfo {
-        eye: Point3::new(5.0, 5.0, 5.0),
-        at: Point3::origin(),
+        eye: Point3::new(5.0, 0.0, 5.0),
+        at: Point3::new(0.0, -3.0, 0.0),
       },
       GlobalParams {
         scene_model_params: SceneModelParams { g: 9.8 },
         integration_params: IntegrationParams {
           step_params: StepParams {
-            speed_up: 1.0,
-            time_step: 0.0001,
+            speed_up,
+            time_step,
           },
-          integrator_type: opts.integrator,
+          integrator_type,
         },
       },
       vec![(mesh, mesh_params)],

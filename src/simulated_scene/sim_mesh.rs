@@ -103,6 +103,8 @@ impl SimMesh {
       {
         let get_vertex = |idx| vertex_positions_obj_space[idx as usize];
 
+        face.sort();
+
         let vertices = [
           get_vertex(face[0]),
           get_vertex(face[1]),
@@ -120,9 +122,9 @@ impl SimMesh {
 
         if above_plane {
           *opposite_normal *= -1.0;
-        }
 
-        face.sort();
+          face.reverse();
+        }
 
         debug_assert_eq!(
           face.len(),
