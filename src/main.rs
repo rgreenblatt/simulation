@@ -22,7 +22,7 @@ struct Opts {
   #[clap(short = "r", long = "record-image-dir")]
   record_image_dir: Option<String>,
 
-  #[clap(short = "l", long = "frame-limit")]
+  #[clap(short = "f", long = "frame-limit")]
   frame_limit: Option<usize>,
 
   #[clap(long = "force-sim-fps")]
@@ -31,8 +31,31 @@ struct Opts {
   #[clap(long = "speed_up", default_value = "1.0")]
   speed_up: f32,
 
-  #[clap(short = "s", long = "time-step", default_value = "0.0005")]
+  #[clap(short = "t", long = "time-step", default_value = "0.0005")]
   time_step: f32,
+
+  #[clap(short = "l", long = "incompressibility", default_value = "100.0")]
+  /// lambda
+  incompressibility: f32,
+
+  #[clap(short = "m", long = "rigidity", default_value = "100.0")]
+  /// mu
+  rigidity: f32,
+
+  #[clap(
+    short = "p",
+    long = "viscous_incompressibility",
+    default_value = "10.0"
+  )]
+  /// phi
+  viscous_incompressibility: f32,
+
+  #[clap(short = "s", long = "viscous_rigidity", default_value = "10.0")]
+  /// psi
+  viscous_rigidity: f32,
+
+  #[clap(short = "d", long = "density", default_value = "5.0")]
+  density: f32,
 
   #[clap(subcommand)]
   integrator_type: IntegratorType,
@@ -47,6 +70,11 @@ fn main() -> std::io::Result<()> {
     force_sim_fps,
     speed_up,
     time_step,
+    incompressibility,
+    rigidity,
+    viscous_rigidity,
+    viscous_incompressibility,
+    density,
     integrator_type,
   } = Opts::parse();
 
@@ -58,11 +86,11 @@ fn main() -> std::io::Result<()> {
   )?;
 
   let mesh_params = MeshParams {
-    incompressibility: 100.,
-    rigidity: 10.,
-    viscous_incompressibility: 2.,
-    viscous_rigidity: 30.,
-    density: 5.0,
+    incompressibility,
+    rigidity,
+    viscous_incompressibility,
+    viscous_rigidity,
+    density,
   };
 
   display_scene(
