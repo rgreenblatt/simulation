@@ -57,7 +57,12 @@ struct Opts {
   #[clap(short = "d", long = "density", default_value = "5.0")]
   density: f32,
 
-  #[clap(short = "g", long = "gravity", default_value = "9.8")]
+  #[clap(
+    short = "g",
+    long = "gravity",
+    default_value = "9.8",
+    allow_hyphen_values = true
+  )]
   g: f32,
 
   #[clap(subcommand)]
