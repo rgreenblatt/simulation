@@ -1,0 +1,27 @@
+Honey:
+incompressibility: 100.,
+rigidity: 10.,
+viscous_incompressibility: 2.,
+viscous_rigidity: 30.,
+density: 5.0,
+
+Rubbery:
+incompressibility: 100.,
+rigidity: 100.,
+viscous_incompressibility: 5.,
+viscous_rigidity: 5.,
+density: 5.0,
+
+Bouncy:
+incompressibility: 50.,
+rigidity: 500.,
+viscous_incompressibility: 5.,
+viscous_rigidity: 5.,
+density: 5.0,
+
+Empty Balloon:
+incompressibility: 500.,
+rigidity: 15.,
+viscous_incompressibility: 5.,
+viscous_rigidity: 5.,
+density: 5.0,
