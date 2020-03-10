@@ -72,6 +72,7 @@ pub struct SimulatedScene {
 
 impl Scene for SimulatedScene {
   fn update(&mut self, delta_secs: f32) {
+    let delta_secs = delta_secs * self.step_params.speed_up;
     let steps = (delta_secs / self.step_params.time_step).ceil() as usize;
 
     self.integrator.n_steps(

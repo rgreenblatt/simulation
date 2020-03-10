@@ -28,7 +28,7 @@ struct Opts {
   #[clap(long = "force-sim-fps")]
   force_sim_fps: Option<f32>,
 
-  #[clap(long = "speed_up", default_value = "1.0")]
+  #[clap(long = "speed-up", default_value = "1.0")]
   speed_up: f32,
 
   #[clap(short = "t", long = "time-step", default_value = "0.0005")]
