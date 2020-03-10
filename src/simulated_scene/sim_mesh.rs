@@ -26,11 +26,11 @@ pub struct MeshParams {
 // TODO: collisions
 #[derive(Clone)]
 pub struct SimMesh {
-  // not needed?
   vertex_positions_obj_space: Vec<Vector3<f32>>, // per vertex
   vertex_mass: Vec<f32>,                         // per vertex
 
-  tetras: Vec<[u16; 4]>,                    // per tet
+  tetras: Vec<[u16; 4]>, // per tet
+  // scaled by face area
   opposite_normals: Vec<[Vector3<f32>; 4]>, // per tet
   inv_barycentric_mat: Vec<Matrix3<f32>>,   // per tet
 
@@ -53,9 +53,9 @@ impl SimMesh {
   fn tetra_val_edges(tetra: [u16; 4], vals: &[Vector3<f32>]) -> Matrix3<f32> {
     let get_vertex = |idx| Self::get_vertex(tetra, vals, idx);
     Matrix3::from_columns(&[
-      get_vertex(1) - get_vertex(0),
-      get_vertex(2) - get_vertex(0),
-      get_vertex(3) - get_vertex(0),
+      get_vertex(0) - get_vertex(3),
+      get_vertex(1) - get_vertex(3),
+      get_vertex(2) - get_vertex(3),
     ])
   }
 
@@ -91,13 +91,14 @@ impl SimMesh {
 
       let mut tet_opposite_normals = [Vector3::zeros(); 4];
 
-      for (face, opposite_normal) in [
+      for ((face, other), opposite_normal) in [
         [tetra[1], tetra[2], tetra[3]],
         [tetra[0], tetra[2], tetra[3]],
         [tetra[0], tetra[1], tetra[3]],
         [tetra[0], tetra[1], tetra[2]],
       ]
       .iter_mut()
+      .zip([tetra[0], tetra[1], tetra[2], tetra[3]].iter())
       .zip(tet_opposite_normals.iter_mut())
       {
         let get_vertex = |idx| vertex_positions_obj_space[idx as usize];
@@ -108,9 +109,18 @@ impl SimMesh {
           get_vertex(face[2]),
         ];
 
-        *opposite_normal = (vertices[1] - vertices[0])
-          .cross(&(vertices[2] - vertices[0]))
-          .normalize();
+        let other_vertex = get_vertex(*other);
+
+        // same magnitude as face area
+        *opposite_normal =
+          0.5 * (vertices[1] - vertices[0]).cross(&(vertices[2] - vertices[0]));
+
+        let above_plane =
+          (other_vertex - vertices[0]).dot(opposite_normal) > 0.0;
+
+        if above_plane {
+          *opposite_normal *= -1.0;
+        }
 
         face.sort();
 
@@ -202,14 +212,12 @@ impl SimMesh {
       let deformation_grad = compute_deformation_grad(positions);
       let velocity_deformation_grad = compute_deformation_grad(velocities);
 
-      let elastic_strain = 0.5
-        * (deformation_grad.transpose() * deformation_grad
-          - Matrix3::identity());
+      let elastic_strain =
+        deformation_grad.transpose() * deformation_grad - Matrix3::identity();
 
-      // TODO: check
-      let viscous_strain = 0.5
-        * (deformation_grad.transpose() * velocity_deformation_grad
-          + velocity_deformation_grad.transpose() * deformation_grad);
+      let viscous_strain = deformation_grad.transpose()
+        * velocity_deformation_grad
+        + velocity_deformation_grad.transpose() * deformation_grad;
 
       let strain_to_stress =
         |strain: Matrix3<_>, incompressibility, rigidity| {
@@ -236,9 +244,7 @@ impl SimMesh {
       for (vertex_idx, opposite_normal) in
         tetra.iter().zip(opposite_normals.iter())
       {
-        let force = mat
-          * self.vertex_positions_obj_space[*vertex_idx as usize]
-            .component_mul(opposite_normal);
+        let force = mat * opposite_normal;
 
         forces[*vertex_idx as usize] += force;
       }

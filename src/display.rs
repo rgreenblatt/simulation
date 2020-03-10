@@ -2,10 +2,35 @@ use crate::{CameraInfo, Scene, SceneGenerator};
 use kiss3d::camera::FirstPerson;
 use kiss3d::light::Light;
 use kiss3d::window::Window;
+use std::fs::create_dir_all;
+use std::io;
+use std::path::Path;
 use std::time::Instant;
 
-pub fn display_scene<S: SceneGenerator>(window_name: &str, scene_gen: &mut S) {
-  let mut window = Window::new(window_name);
+pub fn display_scene<S: SceneGenerator>(
+  window_name: &str,
+  hide: bool,
+  record_image_dir: Option<&Path>,
+  frame_limit: Option<usize>,
+  force_sim_fps: Option<f32>,
+  scene_gen: &mut S,
+) -> io::Result<()> {
+  if let Some(record_image_dir) = record_image_dir {
+    if record_image_dir.exists() {
+      if !record_image_dir.is_dir() {
+        eprintln!("Record image directory exists and isn't directory, exiting");
+        return Ok(());
+      }
+    } else {
+      create_dir_all(record_image_dir)?;
+    }
+  }
+
+  let mut window = Window::new_hidden(window_name);
+
+  if !hide {
+    window.show();
+  }
 
   let mut scene = scene_gen.init_objects(&mut window.add_group());
 
@@ -15,11 +40,32 @@ pub fn display_scene<S: SceneGenerator>(window_name: &str, scene_gen: &mut S) {
 
   let CameraInfo { eye, at } = scene_gen.default_camera_info();
 
+  let mut iters = 0;
+
   let mut cam = FirstPerson::new(eye, at);
 
   while window.render_with_camera(&mut cam) {
-    scene.update(time_since_last.elapsed().as_secs_f32());
-
+    let delta_time = force_sim_fps
+      .map(|fps| 1.0 / fps)
+      .unwrap_or(time_since_last.elapsed().as_secs_f32());
     time_since_last = Instant::now();
+
+    if let Some(record_image_dir) = record_image_dir {
+      window
+        .snap_image()
+        .save(record_image_dir.join(format!("output_{}.png", iters)))?;
+    }
+
+    iters += 1;
+
+    if let Some(frame_limit) = frame_limit {
+      if iters >= frame_limit {
+        break;
+      }
+    }
+
+    scene.update(delta_time);
   }
+
+  Ok(())
 }

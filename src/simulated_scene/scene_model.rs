@@ -14,6 +14,7 @@ pub struct SceneModel {
   sim_meshs: Vec<SimMesh>,
   params: SceneModelParams,
   mesh_intervals: Vec<[u16; 2]>,
+  floor_height: f32, // TODO: generalize
 }
 
 #[derive(Clone)]
@@ -23,7 +24,11 @@ pub struct SceneModelState {
 }
 
 impl SceneModel {
-  pub fn new(sim_meshs: Vec<SimMesh>, params: SceneModelParams) -> Self {
+  pub fn new(
+    sim_meshs: Vec<SimMesh>,
+    params: SceneModelParams,
+    floor_height: f32,
+  ) -> Self {
     let mut mesh_intervals = Vec::new();
 
     let mut total_size = 0;
@@ -38,6 +43,7 @@ impl SceneModel {
       sim_meshs,
       params,
       mesh_intervals,
+      floor_height,
     }
   }
 
@@ -138,7 +144,18 @@ impl Model for SceneModel {
       let accels = mesh.vertex_accels(
         &x.positions[start..end],
         &x.velocities[start..end],
-        &vec![Vector3::zeros(); end - start],
+        &x.positions[start..end]
+          .iter()
+          .map(|pos| {
+            let y_force = if pos[1] < self.floor_height {
+              10000.0 * (self.floor_height - pos[1])
+            } else {
+              0.0
+            };
+
+            Vector3::new(0.0, y_force, 0.0)
+          })
+          .collect::<Vec<_>>(),
         self.params.g,
       );
 

@@ -15,8 +15,22 @@ use std::path::Path;
 #[clap(version = "1.0", author = "Ryan G.")]
 struct Opts {
   mesh_file: String,
+
+  #[clap(short = "h", long = "hide")]
+  hide: bool,
+
+  #[clap(short = "r", long = "record-image-dir")]
+  record_image_dir: Option<String>,
+
+  #[clap(short = "l", long = "frame-limit")]
+  frame_limit: Option<usize>,
+
+  #[clap(long = "force-sim-fps")]
+  force_sim_fps: Option<f32>,
+
   #[clap(subcommand)]
   integrator: IntegratorType,
+  
 }
 
 fn main() -> std::io::Result<()> {
@@ -30,15 +44,19 @@ fn main() -> std::io::Result<()> {
   )?;
 
   let mesh_params = MeshParams {
-    incompressibility: 2.5,
-    rigidity: 2.5,
-    viscous_incompressibility: 2.5,
-    viscous_rigidity: 2.5,
-    density: 10000.0,
+    incompressibility: 1000.,
+    rigidity: 50.,
+    viscous_incompressibility: 30.,
+    viscous_rigidity: 3.,
+    density: 5.0,
   };
 
   display_scene(
     "simulation",
+    opts.hide,
+    opts.record_image_dir.as_ref().map(|v| Path::new(v)),
+    opts.frame_limit,
+    opts.force_sim_fps,
     &mut SimulatedSceneGenerator::new(
       CameraInfo {
         eye: Point3::new(5.0, 5.0, 5.0),
@@ -49,14 +67,14 @@ fn main() -> std::io::Result<()> {
         integration_params: IntegrationParams {
           step_params: StepParams {
             speed_up: 1.0,
-            time_step: 1.0,
+            time_step: 0.0001,
           },
           integrator_type: opts.integrator,
         },
       },
       vec![(mesh, mesh_params)],
     ),
-  );
+  )?;
 
   Ok(())
 }

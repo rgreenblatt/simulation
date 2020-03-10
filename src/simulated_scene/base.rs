@@ -56,13 +56,13 @@ impl SimulatedSceneGenerator {
           .map(|(mesh, params)| SimMesh::new(mesh, params))
           .collect(),
         scene_model_params,
+        -3.0, // TODO: input
       ),
     }
   }
 }
 
 pub struct SimulatedScene {
-  // cube: SceneNode,
   meshes: Vec<Rc<RefCell<Kiss3dMesh>>>,
   scene_model: SceneModel,
   scene_state: SceneModelState,
@@ -72,17 +72,13 @@ pub struct SimulatedScene {
 
 impl Scene for SimulatedScene {
   fn update(&mut self, delta_secs: f32) {
-    // self.cube.prepend_to_local_rotation(
-    //   &Rotation3::new(Vector3::new(1.0, 1.0, 0.0) * delta_secs).into(),
-    // );
-
     let steps = (delta_secs / self.step_params.time_step).ceil() as usize;
 
     self.integrator.n_steps(
       &self.scene_model,
       &mut self.scene_state,
       &mut 0.0,
-      &delta_secs,
+      &(delta_secs / steps as f32),
       steps,
     );
 
@@ -106,12 +102,8 @@ impl SceneGenerator for SimulatedSceneGenerator {
   type S = SimulatedScene;
 
   fn init_objects(&self, node: &mut SceneNode) -> Self::S {
-    // let mut cube = node.add_cube(2.0, 1.0, 1.0);
-
-    // cube.set_color(1.0, 0.0, 0.0);
-
+    // node.add_cube(Point
     SimulatedScene {
-      // cube,
       meshes: (0..self.scene_model.meshs().len())
         .map(|_| {
           let mesh = Rc::new(RefCell::new(Kiss3dMesh::new(
