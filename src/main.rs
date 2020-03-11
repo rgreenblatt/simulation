@@ -7,6 +7,7 @@ use simulation::{
     GlobalParams, IntegrationParams, MeshParams, SceneModelParams,
     SimulatedSceneGenerator, StepParams,
   },
+  simulated_scene::S as Scalar,
   CameraInfo,
 };
 use std::path::Path;
@@ -29,18 +30,18 @@ struct Opts {
   force_sim_fps: Option<f32>,
 
   #[clap(long = "speed-up", default_value = "1.0")]
-  speed_up: f32,
+  speed_up: Scalar,
 
   #[clap(short = "t", long = "time-step", default_value = "0.0005")]
-  time_step: f32,
+  time_step: Scalar,
 
   #[clap(short = "l", long = "incompressibility", default_value = "100.0")]
   /// lambda
-  incompressibility: f32,
+  incompressibility: Scalar,
 
   #[clap(short = "m", long = "rigidity", default_value = "100.0")]
   /// mu
-  rigidity: f32,
+  rigidity: Scalar,
 
   #[clap(
     short = "p",
@@ -48,14 +49,14 @@ struct Opts {
     default_value = "10.0"
   )]
   /// phi
-  viscous_incompressibility: f32,
+  viscous_incompressibility: Scalar,
 
   #[clap(short = "s", long = "viscous_rigidity", default_value = "10.0")]
   /// psi
-  viscous_rigidity: f32,
+  viscous_rigidity: Scalar,
 
   #[clap(short = "d", long = "density", default_value = "5.0")]
-  density: f32,
+  density: Scalar,
 
   #[clap(
     short = "g",
@@ -63,7 +64,7 @@ struct Opts {
     default_value = "9.8",
     allow_hyphen_values = true
   )]
-  g: f32,
+  g: Scalar,
 
   #[clap(subcommand)]
   integrator_type: IntegratorType,

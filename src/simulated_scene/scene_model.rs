@@ -1,6 +1,6 @@
 use crate::{
   ode::{Model, ModelState},
-  simulated_scene::SimMesh,
+  simulated_scene::{SimMesh, S},
 };
 use nalgebra::base::iter::{MatrixIter, MatrixIterMut};
 use nalgebra::dimension::*;
@@ -11,7 +11,7 @@ use std::slice::{Iter, IterMut};
 
 #[derive(Debug, Clone)]
 pub struct SceneModelParams {
-  pub g: f32,
+  pub g: S,
 }
 
 #[derive(Clone)]
@@ -19,20 +19,20 @@ pub struct SceneModel {
   sim_meshs: Vec<SimMesh>,
   params: SceneModelParams,
   mesh_intervals: Vec<[u16; 2]>,
-  floor_height: f32, // TODO: generalize
+  floor_height: S, // TODO: generalize
 }
 
 #[derive(Clone)]
 pub struct SceneModelState {
-  pub positions: Vec<Vector3<f32>>,
-  pub velocities: Vec<Vector3<f32>>,
+  pub positions: Vec<Vector3<S>>,
+  pub velocities: Vec<Vector3<S>>,
 }
 
 impl SceneModel {
   pub fn new(
     sim_meshs: Vec<SimMesh>,
     params: SceneModelParams,
-    floor_height: f32,
+    floor_height: S,
   ) -> Self {
     let mut mesh_intervals = Vec::new();
 
@@ -53,7 +53,6 @@ impl SceneModel {
   }
 
   pub fn initial_state(&self) -> SceneModelState {
-    // TODO: take and use initial transforms/scale
     SceneModelState {
       positions: self
         .sim_meshs
@@ -79,7 +78,7 @@ impl SceneModel {
     &self.mesh_intervals
   }
 
-  pub fn floor_height(&self) -> f32 {
+  pub fn floor_height(&self) -> S {
     self.floor_height
   }
 }
@@ -87,21 +86,21 @@ impl SceneModel {
 type BaseIntoIterGen<'a, I, M> = Flatten<Map<I, M>>;
 
 fn float_iter_vector(
-  vec: &Vector3<f32>,
-) -> MatrixIter<f32, U3, U1, Owned<f32, U3, U1>> {
+  vec: &Vector3<S>,
+) -> MatrixIter<S, U3, U1, Owned<S, U3, U1>> {
   vec.iter()
 }
 
 type FloatIterVector =
   for<'a> fn(
-    &'a Vector3<f32>,
-  ) -> MatrixIter<'a, f32, U3, U1, Owned<f32, U3, U1>>;
+    &'a Vector3<S>,
+  ) -> MatrixIter<'a, S, U3, U1, Owned<S, U3, U1>>;
 
 type BaseIntoIter<'a> =
-  BaseIntoIterGen<'a, Iter<'a, Vector3<f32>>, FloatIterVector>;
+  BaseIntoIterGen<'a, Iter<'a, Vector3<S>>, FloatIterVector>;
 
 impl<'a> IntoIterator for &'a SceneModelState {
-  type Item = &'a f32;
+  type Item = &'a S;
 
   type IntoIter = Chain<BaseIntoIter<'a>, BaseIntoIter<'a>>;
 
@@ -123,21 +122,21 @@ impl<'a> IntoIterator for &'a SceneModelState {
 }
 
 fn float_iter_vector_mut(
-  vec: &mut Vector3<f32>,
-) -> MatrixIterMut<f32, U3, U1, Owned<f32, U3, U1>> {
+  vec: &mut Vector3<S>,
+) -> MatrixIterMut<S, U3, U1, Owned<S, U3, U1>> {
   vec.iter_mut()
 }
 
 type FloatIterVectorMut =
   for<'a> fn(
-    &'a mut Vector3<f32>,
-  ) -> MatrixIterMut<'a, f32, U3, U1, Owned<f32, U3, U1>>;
+    &'a mut Vector3<S>,
+  ) -> MatrixIterMut<'a, S, U3, U1, Owned<S, U3, U1>>;
 
 type BaseIntoIterMut<'a> =
-  BaseIntoIterGen<'a, IterMut<'a, Vector3<f32>>, FloatIterVectorMut>;
+  BaseIntoIterGen<'a, IterMut<'a, Vector3<S>>, FloatIterVectorMut>;
 
 impl<'a> IntoIterator for &'a mut SceneModelState {
-  type Item = &'a mut f32;
+  type Item = &'a mut S;
 
   type IntoIter = Chain<BaseIntoIterMut<'a>, BaseIntoIterMut<'a>>;
 
@@ -158,7 +157,7 @@ impl<'a> IntoIterator for &'a mut SceneModelState {
   }
 }
 
-impl ModelState<f32> for SceneModelState {
+impl ModelState<S> for SceneModelState {
   fn new() -> Self {
     SceneModelState {
       positions: Vec::new(),
@@ -177,7 +176,7 @@ impl ModelState<f32> for SceneModelState {
 }
 
 impl Model for SceneModel {
-  type S = f32;
+  type S = S;
   type State = SceneModelState;
 
   fn derivative(&self, x: &Self::State, dxdt: &mut Self::State, _: &Self::S) {

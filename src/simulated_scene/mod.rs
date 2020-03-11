@@ -1,3 +1,5 @@
+pub type S = f64;
+
 pub mod base;
 pub mod scene_model;
 pub mod sim_mesh;

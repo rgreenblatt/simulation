@@ -1,12 +1,14 @@
-#[cfg(test)]
-use crate::assert_float_eq;
+use crate::simulated_scene::S;
 use crate::LoadedMesh;
 use nalgebra::{Matrix3, Point3, Vector3};
-#[cfg(test)]
-use nalgebra::{Rotation3, Translation3};
+use rayon::prelude::*;
 use std::collections::HashSet;
 use std::iter::FromIterator;
 
+#[cfg(test)]
+use crate::assert_float_eq;
+#[cfg(test)]
+use nalgebra::{Rotation3, Translation3};
 #[cfg(test)]
 use proptest::prelude::*;
 #[cfg(test)]
@@ -14,25 +16,25 @@ use proptest_derive::Arbitrary;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct MeshParams {
-  pub incompressibility: f32,
-  pub rigidity: f32,
+  pub incompressibility: S,
+  pub rigidity: S,
 
-  pub viscous_incompressibility: f32,
-  pub viscous_rigidity: f32,
+  pub viscous_incompressibility: S,
+  pub viscous_rigidity: S,
 
-  pub density: f32,
+  pub density: S,
 }
 
 // TODO: collisions
 #[derive(Clone)]
 pub struct SimMesh {
-  vertex_positions_obj_space: Vec<Vector3<f32>>, // per vertex
-  vertex_mass: Vec<f32>,                         // per vertex
+  vertex_positions_obj_space: Vec<Vector3<S>>, // per vertex
+  vertex_mass: Vec<S>,                         // per vertex
 
   tetras: Vec<[u16; 4]>, // per tet
   // scaled by face area
-  opposite_normals: Vec<[Vector3<f32>; 4]>, // per tet
-  inv_barycentric_mat: Vec<Matrix3<f32>>,   // per tet
+  opposite_normals: Vec<[Vector3<S>; 4]>, // per tet
+  inv_barycentric_mat: Vec<Matrix3<S>>,   // per tet
 
   boundary_vertices: Vec<u16>,
   // indexing scheme must be the same as boundary_vertices
@@ -41,16 +43,17 @@ pub struct SimMesh {
   params: MeshParams,
 }
 
+// This really can handle any number of meshes...
 impl SimMesh {
   fn get_vertex(
     tetra: [u16; 4],
-    vals: &[Vector3<f32>],
+    vals: &[Vector3<S>],
     idx: usize,
-  ) -> Vector3<f32> {
+  ) -> Vector3<S> {
     vals[tetra[idx] as usize]
   }
 
-  fn tetra_val_edges(tetra: [u16; 4], vals: &[Vector3<f32>]) -> Matrix3<f32> {
+  fn tetra_val_edges(tetra: [u16; 4], vals: &[Vector3<S>]) -> Matrix3<S> {
     let get_vertex = |idx| Self::get_vertex(tetra, vals, idx);
     Matrix3::from_columns(&[
       get_vertex(0) - get_vertex(3),
@@ -63,6 +66,11 @@ impl SimMesh {
     (vertex_positions_obj_space, tetras): LoadedMesh,
     params: MeshParams,
   ) -> Self {
+    let vertex_positions_obj_space: Vec<Vector3<S>> =
+      vertex_positions_obj_space
+        .iter()
+        .map(|v| nalgebra::convert(*v))
+        .collect();
     // SPEED: reserve space
     let mut inv_barycentric_mat = Vec::new();
     let mut opposite_normals = Vec::new();
@@ -186,63 +194,89 @@ impl SimMesh {
     self.vertex_mass.len() as u16
   }
 
-  pub fn vertices_obj_space(&self) -> &[Vector3<f32>] {
+  pub fn vertices_obj_space(&self) -> &[Vector3<S>] {
     &self.vertex_positions_obj_space
+  }
+
+  fn get_mat(
+    &self,
+    tetra: [u16; 4],
+    inv_barycentric_mat: &Matrix3<S>,
+    positions: &[Vector3<S>],
+    velocities: &[Vector3<S>],
+  ) -> Matrix3<S> {
+    let compute_deformation_grad = |vals: &[Vector3<S>]| {
+      let val_edges = Self::tetra_val_edges(tetra, vals);
+
+      val_edges * inv_barycentric_mat
+    };
+
+    let deformation_grad = compute_deformation_grad(positions);
+    let velocity_deformation_grad = compute_deformation_grad(velocities);
+
+    let elastic_strain =
+      deformation_grad.transpose() * deformation_grad - Matrix3::identity();
+
+    let viscous_strain = deformation_grad.transpose()
+      * velocity_deformation_grad
+      + velocity_deformation_grad.transpose() * deformation_grad;
+
+    let strain_to_stress = |strain: Matrix3<_>, incompressibility, rigidity| {
+      incompressibility * Matrix3::identity() * strain.trace()
+        + 2.0 * rigidity * strain
+    };
+
+    let elastic_stress = strain_to_stress(
+      elastic_strain,
+      self.params.incompressibility,
+      self.params.rigidity,
+    );
+
+    let viscous_stress = strain_to_stress(
+      viscous_strain,
+      self.params.viscous_incompressibility,
+      self.params.viscous_rigidity,
+    );
+
+    let stress = elastic_stress + viscous_stress;
+
+    deformation_grad * stress
   }
 
   pub fn vertex_accels(
     &self,
-    positions: &[Vector3<f32>],
-    velocities: &[Vector3<f32>],
-    forces: &[Vector3<f32>], // external forces other than g should be input
-    g: f32,
-  ) -> Vec<Vector3<f32>> {
+    positions: &[Vector3<S>],
+    velocities: &[Vector3<S>],
+    forces: &[Vector3<S>], // external forces other than g should be input
+    g: S,
+  ) -> Vec<Vector3<S>> {
     let mut forces = forces.to_vec();
 
-    for ((tetra, opposite_normals), inv_barycentric_mat) in self
-      .tetras
-      .iter()
-      .zip(self.opposite_normals.iter())
-      .zip(self.inv_barycentric_mat.iter())
+    let use_par = positions.len() > 300;
+
+    let mats = if use_par {
+      self
+        .tetras
+        .par_iter()
+        .zip(self.inv_barycentric_mat.par_iter())
+        .map(|(tetra, inv_barycentric_mat)| {
+          self.get_mat(*tetra, inv_barycentric_mat, positions, velocities)
+        })
+        .collect::<Vec<_>>()
+    } else {
+      self
+        .tetras
+        .iter()
+        .zip(self.inv_barycentric_mat.iter())
+        .map(|(tetra, inv_barycentric_mat)| {
+          self.get_mat(*tetra, inv_barycentric_mat, positions, velocities)
+        })
+        .collect::<Vec<_>>()
+    };
+
+    for ((mat, opposite_normals), tetra) in
+      mats.iter().zip(&self.opposite_normals).zip(&self.tetras)
     {
-      let compute_deformation_grad = |vals: &[Vector3<f32>]| {
-        let val_edges = Self::tetra_val_edges(*tetra, vals);
-
-        val_edges * inv_barycentric_mat
-      };
-
-      let deformation_grad = compute_deformation_grad(positions);
-      let velocity_deformation_grad = compute_deformation_grad(velocities);
-
-      let elastic_strain =
-        deformation_grad.transpose() * deformation_grad - Matrix3::identity();
-
-      let viscous_strain = deformation_grad.transpose()
-        * velocity_deformation_grad
-        + velocity_deformation_grad.transpose() * deformation_grad;
-
-      let strain_to_stress =
-        |strain: Matrix3<_>, incompressibility, rigidity| {
-          incompressibility * Matrix3::identity() * strain.trace()
-            + 2.0 * rigidity * strain
-        };
-
-      let elastic_stress = strain_to_stress(
-        elastic_strain,
-        self.params.incompressibility,
-        self.params.rigidity,
-      );
-
-      let viscous_stress = strain_to_stress(
-        viscous_strain,
-        self.params.viscous_incompressibility,
-        self.params.viscous_rigidity,
-      );
-
-      let stress = elastic_stress + viscous_stress;
-
-      let mat = deformation_grad * stress;
-
       for (vertex_idx, opposite_normal) in
         tetra.iter().zip(opposite_normals.iter())
       {
@@ -253,12 +287,15 @@ impl SimMesh {
     }
 
     // gravity
-    for (force, mass) in forces.iter_mut().zip(self.vertex_mass.iter()) {
-      *force += -mass * g * Vector3::new(0.0, 1.0, 0.0);
-    }
+    forces
+      .iter_mut()
+      .zip(self.vertex_mass.iter())
+      .for_each(|(force, mass)| {
+        *force += -mass * g * Vector3::new(0.0, 1.0, 0.0);
+      });
 
     forces
-      .into_iter()
+      .iter()
       .enumerate()
       .map(|(vertex_idx, force)| force / self.vertex_mass[vertex_idx])
       .collect()
@@ -267,13 +304,17 @@ impl SimMesh {
   // SPEED: consider changing to avoid copies
   pub fn boundary_vertices_faces(
     &self,
-    positions: &[Vector3<f32>],
+    positions: &[Vector3<S>],
   ) -> (Vec<Point3<f32>>, Vec<Point3<u16>>) {
     (
       self
         .boundary_vertices
         .iter()
-        .map(|vertex_idx| Point3::from(positions[*vertex_idx as usize]))
+        .map(|vertex_idx| {
+          let v: Vector3<f32> =
+            nalgebra::convert(positions[*vertex_idx as usize]);
+          Point3::from(v)
+        })
         .collect(),
       self
         .boundary_faces
@@ -296,7 +337,7 @@ fn basic_params() -> MeshParams {
 }
 
 #[cfg(test)]
-type MeshInfo = (SimMesh, Vec<Vector3<f32>>, Vec<[u16; 4]>);
+type MeshInfo = (SimMesh, Vec<Vector3<S>>, Vec<[u16; 4]>);
 
 #[cfg(test)]
 #[derive(Debug, Arbitrary)]
@@ -308,6 +349,8 @@ enum MeshOptions {
 #[cfg(test)]
 impl MeshOptions {
   fn get_mesh(&self, params: &MeshParams) -> MeshInfo {
+    let to_f32 =
+      |vec: &Vec<_>| vec.iter().map(|v| nalgebra::convert(*v)).collect();
     match self {
       MeshOptions::SingleTet => {
         let positions = vec![
@@ -318,7 +361,7 @@ impl MeshOptions {
         ];
         let tetras = vec![[0, 1, 2, 3]];
         let mesh =
-          SimMesh::new((positions.clone(), tetras.clone()), params.clone());
+          SimMesh::new((to_f32(&positions), tetras.clone()), params.clone());
 
         (mesh, positions, tetras)
       }
@@ -332,7 +375,7 @@ impl MeshOptions {
         ];
         let tetras = vec![[0, 1, 2, 3], [4, 1, 2, 3]];
         let mesh =
-          SimMesh::new((positions.clone(), tetras.clone()), params.clone());
+          SimMesh::new((to_f32(&positions), tetras.clone()), params.clone());
 
         (mesh, positions, tetras)
       }
@@ -366,8 +409,8 @@ fn single_tet_basic() {
   // assert_eq!(mesh.boundary_vertices, vec![0, 1, 2, 3]);
 
   let vol = 1.0 / 6.0;
-  let total_mass: f32 = vol * params.density;
-  let actual_total_mass: f32 = mesh.vertex_mass.iter().sum();
+  let total_mass: S = vol * params.density;
+  let actual_total_mass: S = mesh.vertex_mass.iter().sum();
   assert_float_eq!(total_mass, actual_total_mass);
   let each_mass = actual_total_mass / 4.0;
   for mass in &mesh.vertex_mass {
@@ -409,8 +452,8 @@ fn double_tet_basic() {
 
   let vol_each_tet = 1.0 / 6.0;
   let vol = vol_each_tet * 2.0;
-  let total_mass: f32 = vol * params.density;
-  let actual_total_mass: f32 = mesh.vertex_mass.iter().sum();
+  let total_mass: S = vol * params.density;
+  let actual_total_mass: S = mesh.vertex_mass.iter().sum();
   assert_float_eq!(total_mass, actual_total_mass);
   assert_float_eq!(mesh.vertex_mass[0], total_mass / 2.0 / 4.0);
   assert_float_eq!(mesh.vertex_mass[4], total_mass / 2.0 / 4.0);
@@ -424,15 +467,15 @@ fn double_tet_basic() {
 proptest! {
 #[test]
 fn rigid_transform_gravity(
-  g in 0.0f32..100.0,
-  incompressibility in 0.001f32..100.0,
-  rigidity in 0.001f32..100.0,
-  viscous_incompressibility in 0.001f32..100.0,
-  viscous_rigidity in 0.001f32..100.0,
-  density in 100.0f32..10000.0,
+  g in 0.0f64..100.0,
+  incompressibility in 0.001f64..1000.0,
+  rigidity in 0.001f64..1000.0,
+  viscous_incompressibility in 0.001f64..1000.0,
+  viscous_rigidity in 0.001f64..1000.0,
+  density in 0.01f64..10000.0,
   mesh_option : MeshOptions,
-  translation in prop::array::uniform3(-2.0f32..2.0),
-  rotation in prop::array::uniform3(-2.0f32..2.0),
+  translation in prop::array::uniform3(-2.0f64..2.0),
+  rotation in prop::array::uniform3(-2.0f64..2.0),
 ) {
   let params = MeshParams {
     incompressibility,

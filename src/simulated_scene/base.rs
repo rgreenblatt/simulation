@@ -1,7 +1,7 @@
 use crate::{
   ode::{Integrator, IntegratorType, SwappableIntegrator},
   simulated_scene::{
-    MeshParams, SceneModel, SceneModelParams, SceneModelState, SimMesh,
+    MeshParams, SceneModel, SceneModelParams, SceneModelState, SimMesh, S,
   },
   CameraInfo, LoadedMesh, Scene, SceneGenerator,
 };
@@ -13,8 +13,8 @@ use std::rc::Rc;
 
 #[derive(Clone, Debug)]
 pub struct StepParams {
-  pub time_step: f32,
-  pub speed_up: f32,
+  pub time_step: S,
+  pub speed_up: S,
 }
 
 #[derive(Clone, Debug)]
@@ -72,14 +72,14 @@ pub struct SimulatedScene {
 
 impl Scene for SimulatedScene {
   fn update(&mut self, delta_secs: f32) {
-    let delta_secs = delta_secs * self.step_params.speed_up;
+    let delta_secs = (delta_secs as S) * self.step_params.speed_up;
     let steps = (delta_secs / self.step_params.time_step).ceil() as usize;
 
     self.integrator.n_steps(
       &self.scene_model,
       &mut self.scene_state,
       &mut 0.0,
-      &(delta_secs / steps as f32),
+      &(delta_secs / steps as S),
       steps,
     );
 
@@ -110,7 +110,7 @@ impl SceneGenerator for SimulatedSceneGenerator {
       node.add_cube(floor_width, floor_thickness, floor_depth);
     floor_node.append_translation(&Translation3::new(
       0.0,
-      (-0.5 * floor_thickness) + self.scene_model.floor_height(),
+      (-0.5 * floor_thickness) + (self.scene_model.floor_height() as f32),
       0.0,
     ));
     floor_node.set_color(0.0, 0.0, 1.0);

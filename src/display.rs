@@ -1,4 +1,5 @@
 use crate::{CameraInfo, Scene, SceneGenerator};
+use indicatif::ProgressBar;
 use kiss3d::camera::FirstPerson;
 use kiss3d::light::Light;
 use kiss3d::window::Window;
@@ -44,10 +45,13 @@ pub fn display_scene<S: SceneGenerator>(
 
   let mut cam = FirstPerson::new(eye, at);
 
+  let mut frame_limit_bar = frame_limit
+    .map(|frame_limit| (frame_limit, ProgressBar::new(frame_limit as u64)));
+
   while window.render_with_camera(&mut cam) {
     let delta_time = force_sim_fps
       .map(|fps| 1.0 / fps)
-      .unwrap_or(time_since_last.elapsed().as_secs_f32());
+      .unwrap_or_else(|| time_since_last.elapsed().as_secs_f32());
     time_since_last = Instant::now();
 
     if let Some(record_image_dir) = record_image_dir {
@@ -58,13 +62,18 @@ pub fn display_scene<S: SceneGenerator>(
 
     iters += 1;
 
-    if let Some(frame_limit) = frame_limit {
-      if iters >= frame_limit {
+    if let Some((frame_limit, p_bar)) = &mut frame_limit_bar {
+      if iters >= *frame_limit {
         break;
       }
+      p_bar.inc(1);
     }
 
     scene.update(delta_time);
+  }
+
+  if let Some((_, p_bar)) = &mut frame_limit_bar {
+    p_bar.finish();
   }
 
   Ok(())
