@@ -92,9 +92,7 @@ fn float_iter_vector(
 }
 
 type FloatIterVector =
-  for<'a> fn(
-    &'a Vector3<S>,
-  ) -> MatrixIter<'a, S, U3, U1, Owned<S, U3, U1>>;
+  for<'a> fn(&'a Vector3<S>) -> MatrixIter<'a, S, U3, U1, Owned<S, U3, U1>>;
 
 type BaseIntoIter<'a> =
   BaseIntoIterGen<'a, Iter<'a, Vector3<S>>, FloatIterVector>;

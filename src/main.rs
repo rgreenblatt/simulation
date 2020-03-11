@@ -3,11 +3,11 @@ use nalgebra::{Point3, Rotation3, Transform3, Vector3};
 use simulation::{
   display_scene, load_mesh_with_transform,
   ode::IntegratorType,
+  simulated_scene::S as Scalar,
   simulated_scene::{
     GlobalParams, IntegrationParams, MeshParams, SceneModelParams,
     SimulatedSceneGenerator, StepParams,
   },
-  simulated_scene::S as Scalar,
   CameraInfo,
 };
 use std::path::Path;
