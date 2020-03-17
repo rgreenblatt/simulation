@@ -1,8 +1,13 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use nalgebra::Vector3;
 use simulation::load_mesh;
-use simulation::ode::{IntegratorType, SwappableIntegrator};
-use simulation::simulated_scene::{MeshParams, SimMesh, S};
+use simulation::ode::{
+  EulerSettings, Integrator, IntegratorType, MidpointSettings, RK4Settings,
+  SwappableIntegrator,
+};
+use simulation::simulated_scene::{
+  MeshParams, SceneModel, SceneModelParams, SimMesh, S,
+};
 use std::path::Path;
 
 fn get_mesh_for_repeat(repeat: usize) -> (SimMesh, Vec<Vector3<S>>) {
@@ -68,32 +73,35 @@ fn vertex_accels(c: &mut Criterion) {
 
 fn integrator(c: &mut Criterion) {
   for integrator_type in [
-    IntegratorType::Euler,
-    IntegratorType::Midpoint,
-    IntegratorType::RK4,
+    IntegratorType::Euler(EulerSettings {}),
+    IntegratorType::Midpoint(MidpointSettings {}),
+    IntegratorType::RK4(RK4Settings {}),
   ]
   .iter()
   {
     for repeat_mesh_count in [1, 5, 10, 100].iter() {
-      let (mesh, zeros) = get_mesh_for_repeat(*repeat_mesh_count);
-      let mut accels = zeros.clone();
+      let (mesh, _) = get_mesh_for_repeat(*repeat_mesh_count);
 
       let g = 9.8;
 
-      // c.bench_function(
-      //   &format!("vertex accels ellipsoid x {}", repeat_mesh_count),
-      //   |b| {
-      //     b.iter(|| {
-      //       mesh.vertex_accels_pass_accel(
-      //         black_box(&zeros),
-      //         black_box(&zeros),
-      //         black_box(&zeros),
-      //         black_box(g),
-      //         black_box(&mut accels),
-      //       )
-      //     })
-      //   },
-      // );
+      let model = SceneModel::new(vec![mesh], SceneModelParams { g }, -100.0);
+
+      let mut integrator = SwappableIntegrator::new(integrator_type.clone());
+
+      let mut state = model.initial_state();
+
+      let mut time = 0.0;
+      let time_step = 0.1;
+
+      c.bench_function(
+        &format!(
+          "integrator {:?} ellipsoid x {}",
+          integrator_type, repeat_mesh_count
+        ),
+        |b| {
+          b.iter(|| integrator.step(&model, &mut state, &mut time, &time_step))
+        },
+      );
     }
   }
 }
