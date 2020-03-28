@@ -9,7 +9,7 @@ Add `/home/rgreenb6/.cargo/bin` to your path and then the project should be
 buildable with `cargo build --release` which will put the binary at
 `target/release/simulation`. A
 docker container which can run the project can be found
-[here](https://hub.docker.com/r/greenblattryan/simulation).  I have also
+ [here](https://hub.docker.com/r/greenblattryan/simulation).  I have also
 included a binary in the `bin/` directory. This binary runs on the department
 machines and will probably run on any reasonably recent
 version of linux.
