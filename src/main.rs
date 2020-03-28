@@ -45,13 +45,13 @@ struct Opts {
 
   #[clap(
     short = "p",
-    long = "viscous_incompressibility",
+    long = "viscous-incompressibility",
     default_value = "2.0"
   )]
   /// phi
   viscous_incompressibility: Scalar,
 
-  #[clap(short = "s", long = "viscous_rigidity", default_value = "5.0")]
+  #[clap(short = "s", long = "viscous-rigidity", default_value = "5.0")]
   /// psi
   viscous_rigidity: Scalar,
 
