@@ -2,9 +2,12 @@
 
 ## Notes
 
-This project is implemented in Rust using the kiss3d library. I wasn't able to
-find a working rust install anywhere in the department file system (in theory,
-/course/cs1680/contrib/ should have one, but the permissions are wrong).  A
+This project is implemented in Rust using the kiss3d library. I have installed
+rust under my user on the department machines and anyone should be able to
+use my install (assuming I don't get dinged for too much disk usage).
+Add `/home/rgreenb6/.cargo/bin` to your path and then the project should be
+buildable with `cargo build --release` which will put the binary at
+`target/release/simulation`. A
 docker container which can run the project can be found
 [here](https://hub.docker.com/r/greenblattryan/simulation).  I have also
 included a binary in the `bin/` directory. This binary runs on the department
@@ -65,7 +68,10 @@ of valid commands:
 ## Examples
 
 Videos can be found in the `outputs/` directory. Some of the command line arguments
-are specifically for producing videos at 30 fps. Here are the commands used to
+are specifically for producing videos at 30 fps. All of these videos
+demo sphere intersection and there is a video to show what the simulation looks
+like without friction. There is also a video showing that rk4 improves accuracy
+by comparing to midpoint. Here are the commands used to
 produce all of the videos and explanations of what they show:
 
 ```
