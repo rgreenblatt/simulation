@@ -41,6 +41,11 @@ impl SimulatedSceneGenerator {
     camera_info: CameraInfo,
     global_params: GlobalParams,
     meshs: Vec<(LoadedMesh, MeshParams)>,
+    penalty_force: S,
+    floor_friction_coeff: S,
+    floor_pos: S,
+    sphere_radius: S,
+    sphere_pos: Vector3<S>,
   ) -> Self {
     let GlobalParams {
       scene_model_params,
@@ -56,7 +61,11 @@ impl SimulatedSceneGenerator {
           .map(|(mesh, params)| SimMesh::new(mesh, params))
           .collect(),
         scene_model_params,
-        -3.0, // TODO: input
+        penalty_force,
+        floor_friction_coeff,
+        floor_pos,
+        sphere_radius,
+        sphere_pos,
       ),
     }
   }
@@ -114,6 +123,13 @@ impl SceneGenerator for SimulatedSceneGenerator {
       0.0,
     ));
     floor_node.set_color(0.0, 0.0, 1.0);
+
+    let mut sphere_node =
+      node.add_sphere(self.scene_model.sphere_radius() as f32);
+
+    sphere_node.append_translation(&nalgebra::convert(Translation3::from(
+      self.scene_model.sphere_pos(),
+    )));
 
     SimulatedScene {
       meshes: (0..self.scene_model.meshs().len())

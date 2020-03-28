@@ -25,7 +25,6 @@ pub struct MeshParams {
   pub density: S,
 }
 
-// TODO: collisions
 #[derive(Clone)]
 pub struct SimMesh {
   vertex_positions_obj_space: Vec<Vector3<S>>, // per vertex
@@ -43,7 +42,6 @@ pub struct SimMesh {
   params: MeshParams,
 }
 
-// This really can handle any number of meshes...
 impl SimMesh {
   fn get_vertex(
     tetra: [u16; 4],
@@ -294,6 +292,7 @@ impl SimMesh {
         *force += -mass * g * Vector3::new(0.0, 1.0, 0.0);
       });
 
+    // convert to accel
     forces
       .iter()
       .enumerate()
@@ -301,7 +300,6 @@ impl SimMesh {
       .collect()
   }
 
-  // SPEED: consider changing to avoid copies
   pub fn boundary_vertices_faces(
     &self,
     positions: &[Vector3<S>],

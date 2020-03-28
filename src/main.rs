@@ -66,6 +66,43 @@ struct Opts {
   )]
   g: Scalar,
 
+  #[clap(long = "penalty-force", default_value = "10000.0")]
+  penalty_force: Scalar,
+
+  #[clap(long = "floor-friction-coeff", default_value = "0.1")]
+  floor_friction_coeff: Scalar,
+
+  #[clap(long = "sphere-radius", default_value = "0.5")]
+  sphere_radius: Scalar,
+
+  #[clap(
+    long = "sphere-pos-x",
+    default_value = "0.0",
+    allow_hyphen_values = true
+  )]
+  sphere_pos_x: Scalar,
+
+  #[clap(
+    long = "sphere-pos-y",
+    default_value = "-2.0",
+    allow_hyphen_values = true
+  )]
+  sphere_pos_y: Scalar,
+
+  #[clap(
+    long = "sphere-pos-z",
+    default_value = "0.0",
+    allow_hyphen_values = true
+  )]
+  sphere_pos_z: Scalar,
+
+  #[clap(
+    long = "floor-pos",
+    default_value = "-3.0",
+    allow_hyphen_values = true
+  )]
+  floor_pos: Scalar,
+
   #[clap(subcommand)]
   integrator_type: IntegratorType,
 }
@@ -84,8 +121,15 @@ fn main() -> std::io::Result<()> {
     viscous_rigidity,
     viscous_incompressibility,
     density,
-    integrator_type,
     g,
+    penalty_force,
+    floor_friction_coeff,
+    sphere_radius,
+    sphere_pos_x,
+    sphere_pos_y,
+    sphere_pos_z,
+    floor_pos,
+    integrator_type,
   } = Opts::parse();
 
   let mesh = load_mesh_with_transform(
@@ -125,6 +169,11 @@ fn main() -> std::io::Result<()> {
         },
       },
       vec![(mesh, mesh_params)],
+      penalty_force,
+      floor_friction_coeff,
+      floor_pos,
+      sphere_radius,
+      Vector3::new(sphere_pos_x, sphere_pos_y, sphere_pos_z),
     ),
   )?;
 

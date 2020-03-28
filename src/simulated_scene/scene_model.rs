@@ -19,7 +19,11 @@ pub struct SceneModel {
   sim_meshs: Vec<SimMesh>,
   params: SceneModelParams,
   mesh_intervals: Vec<[u16; 2]>,
-  floor_height: S, // TODO: generalize
+  penalty_force: S,
+  floor_friction_coeff: S,
+  floor_height: S,
+  sphere_radius: S,
+  sphere_pos: Vector3<S>,
 }
 
 #[derive(Clone)]
@@ -32,7 +36,11 @@ impl SceneModel {
   pub fn new(
     sim_meshs: Vec<SimMesh>,
     params: SceneModelParams,
+    penalty_force: S,
+    floor_friction_coeff: S,
     floor_height: S,
+    sphere_radius: S,
+    sphere_pos: Vector3<S>,
   ) -> Self {
     let mut mesh_intervals = Vec::new();
 
@@ -48,7 +56,11 @@ impl SceneModel {
       sim_meshs,
       params,
       mesh_intervals,
+      penalty_force,
+      floor_friction_coeff,
       floor_height,
+      sphere_radius,
+      sphere_pos,
     }
   }
 
@@ -80,6 +92,14 @@ impl SceneModel {
 
   pub fn floor_height(&self) -> S {
     self.floor_height
+  }
+
+  pub fn sphere_radius(&self) -> S {
+    self.sphere_radius
+  }
+
+  pub fn sphere_pos(&self) -> Vector3<S> {
+    self.sphere_pos
   }
 }
 
@@ -183,19 +203,35 @@ impl Model for SceneModel {
     {
       let start = *start as usize;
       let end = *end as usize;
+
       let accels = mesh.vertex_accels(
         &x.positions[start..end],
         &x.velocities[start..end],
         &x.positions[start..end]
           .iter()
-          .map(|pos| {
-            let y_force = if pos[1] < self.floor_height {
-              10000.0 * (self.floor_height - pos[1])
-            } else {
-              0.0
-            };
+          .zip(&x.velocities[start..end])
+          .map(|(pos, vel)| {
+            let mut force = Vector3::zeros();
 
-            Vector3::new(0.0, y_force, 0.0)
+            if pos[1] < self.floor_height {
+              let normal_force =
+                self.penalty_force * (self.floor_height - pos[1]);
+              force -=
+                vel.normalize() * normal_force * self.floor_friction_coeff;
+              force[1] += normal_force;
+            }
+
+            let sphere_diff = pos - self.sphere_pos;
+            let sphere_diff_norm = sphere_diff.norm();
+
+            if sphere_diff_norm < self.sphere_radius {
+              // dbg!(sphere_diff / sphere_diff_norm);
+              force += sphere_diff / sphere_diff_norm
+                * self.penalty_force
+                * (self.sphere_radius - sphere_diff_norm);
+            }
+
+            force
           })
           .collect::<Vec<_>>(),
         self.params.g,
