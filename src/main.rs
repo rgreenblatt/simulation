@@ -32,7 +32,7 @@ struct Opts {
   #[clap(long = "speed-up", default_value = "1.0")]
   speed_up: Scalar,
 
-  #[clap(short = "t", long = "time-step", default_value = "0.0005")]
+  #[clap(short = "t", long = "time-step", default_value = "0.0025")]
   time_step: Scalar,
 
   #[clap(short = "l", long = "incompressibility", default_value = "100.0")]
@@ -46,12 +46,12 @@ struct Opts {
   #[clap(
     short = "p",
     long = "viscous_incompressibility",
-    default_value = "10.0"
+    default_value = "2.0"
   )]
   /// phi
   viscous_incompressibility: Scalar,
 
-  #[clap(short = "s", long = "viscous_rigidity", default_value = "10.0")]
+  #[clap(short = "s", long = "viscous_rigidity", default_value = "5.0")]
   /// psi
   viscous_rigidity: Scalar,
 
@@ -72,7 +72,7 @@ struct Opts {
   #[clap(long = "floor-friction-coeff", default_value = "0.1")]
   floor_friction_coeff: Scalar,
 
-  #[clap(long = "sphere-radius", default_value = "0.5")]
+  #[clap(long = "sphere-radius", default_value = "1.0")]
   sphere_radius: Scalar,
 
   #[clap(
@@ -84,7 +84,7 @@ struct Opts {
 
   #[clap(
     long = "sphere-pos-y",
-    default_value = "-2.0",
+    default_value = "-3.5",
     allow_hyphen_values = true
   )]
   sphere_pos_y: Scalar,

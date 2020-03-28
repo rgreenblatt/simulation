@@ -113,8 +113,8 @@ impl SceneGenerator for SimulatedSceneGenerator {
 
   fn init_objects(&self, node: &mut SceneNode) -> Self::S {
     let floor_thickness = 0.2;
-    let floor_width = 5.0;
-    let floor_depth = 5.0;
+    let floor_width = 10.0;
+    let floor_depth = 10.0;
     let mut floor_node =
       node.add_cube(floor_width, floor_thickness, floor_depth);
     floor_node.append_translation(&Translation3::new(
